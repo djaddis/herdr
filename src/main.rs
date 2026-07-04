@@ -123,8 +123,11 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 
 # Override individual color tokens on top of the base theme.
 # Accepts: hex (#rrggbb), named colors, rgb(r,g,b), or panel_bg = "reset"
+# sidebar_bg paints the sidebar body; "reset" (the default) inherits the
+# host terminal background.
 # [theme.custom]
 # panel_bg = "reset"
+# sidebar_bg = "reset"
 # accent = "#f5c2e7"
 # red = "#ff6188"
 # green = "#a6e3a1"

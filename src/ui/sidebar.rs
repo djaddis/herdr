@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
@@ -634,6 +634,22 @@ pub(crate) fn collapsed_sidebar_sections(area: Rect) -> (Rect, Option<u16>, Rect
     (ws_area, Some(divider_y), detail_area)
 }
 
+/// Fill the sidebar body with the theme's `sidebar_bg`. A `Reset` value (the
+/// default for all built-in themes) leaves the host terminal background
+/// showing through, so this is a no-op unless a theme opts in.
+fn fill_sidebar_bg(p: &Palette, frame: &mut Frame, area: Rect) {
+    if p.sidebar_bg == Color::Reset {
+        return;
+    }
+    let style = Style::default().bg(p.sidebar_bg);
+    let buf = frame.buffer_mut();
+    for y in area.y..area.y + area.height {
+        for x in area.x..area.x + area.width {
+            buf[(x, y)].set_style(style);
+        }
+    }
+}
+
 /// Collapsed sidebar: workspace glance on top, compact agent list below.
 pub(super) fn render_sidebar_collapsed(app: &AppState, frame: &mut Frame, area: Rect) {
     if area.width == 0 || area.height == 0 {
@@ -643,6 +659,7 @@ pub(super) fn render_sidebar_collapsed(app: &AppState, frame: &mut Frame, area: 
     let is_navigating = matches!(app.mode, Mode::Navigate);
 
     let p = &app.palette;
+    fill_sidebar_bg(p, frame, area);
     let sep_style = if is_navigating {
         Style::default().fg(p.accent)
     } else {
@@ -789,6 +806,7 @@ pub(super) fn render_sidebar(
     area: Rect,
 ) {
     let p = &app.palette;
+    fill_sidebar_bg(p, frame, area);
     let is_navigating = matches!(app.mode, Mode::Navigate);
     let sep_style = if is_navigating {
         Style::default().fg(p.accent)
@@ -1189,6 +1207,68 @@ mod tests {
     use super::*;
     use crate::{detect::Agent, workspace::Workspace};
     use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn sidebar_bg_reset_leaves_terminal_background() {
+        let app = crate::app::state::AppState::test_new();
+        assert_eq!(app.palette.sidebar_bg, Color::Reset);
+        let area = Rect::new(0, 0, 26, 20);
+        let mut terminal =
+            Terminal::new(TestBackend::new(26, 20)).expect("test terminal should initialize");
+
+        let runtimes = TerminalRuntimeRegistry::new();
+        terminal
+            .draw(|frame| render_sidebar(&app, &runtimes, frame, area))
+            .expect("sidebar should render");
+
+        // An empty body cell keeps the terminal default background.
+        assert_eq!(
+            terminal.backend().buffer()[(1, area.height - 2)].bg,
+            Color::Reset
+        );
+    }
+
+    #[test]
+    fn sidebar_bg_fills_expanded_sidebar_body() {
+        let mut app = crate::app::state::AppState::test_new();
+        app.palette.sidebar_bg = Color::Rgb(255, 0, 255);
+        let area = Rect::new(0, 0, 26, 20);
+        let mut terminal =
+            Terminal::new(TestBackend::new(26, 20)).expect("test terminal should initialize");
+
+        let runtimes = TerminalRuntimeRegistry::new();
+        terminal
+            .draw(|frame| render_sidebar(&app, &runtimes, frame, area))
+            .expect("sidebar should render");
+
+        let buffer = terminal.backend().buffer();
+        // Empty body cells and the corners of the area are filled...
+        assert_eq!(buffer[(1, area.height - 2)].bg, Color::Rgb(255, 0, 255));
+        assert_eq!(buffer[(0, 0)].bg, Color::Rgb(255, 0, 255));
+        // ...and text drawn over the fill keeps it as its background.
+        assert_eq!(
+            buffer[(expanded_sidebar_toggle_rect(area).x, area.height - 1)].bg,
+            Color::Rgb(255, 0, 255)
+        );
+    }
+
+    #[test]
+    fn sidebar_bg_fills_collapsed_sidebar_body() {
+        let mut app = crate::app::state::AppState::test_new();
+        app.palette.sidebar_bg = Color::Rgb(255, 0, 255);
+        let area = Rect::new(0, 0, 5, 20);
+        let mut terminal =
+            Terminal::new(TestBackend::new(5, 20)).expect("test terminal should initialize");
+
+        terminal
+            .draw(|frame| render_sidebar_collapsed(&app, frame, area))
+            .expect("collapsed sidebar should render");
+
+        assert_eq!(
+            terminal.backend().buffer()[(1, area.height - 2)].bg,
+            Color::Rgb(255, 0, 255)
+        );
+    }
 
     #[test]
     fn render_sidebar_toggle_draws_expanded_collapse_icon() {

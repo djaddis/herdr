@@ -32,6 +32,7 @@ pub struct ThemeConfig {
 pub struct CustomThemeColors {
     pub accent: Option<String>,
     pub panel_bg: Option<String>,
+    pub sidebar_bg: Option<String>,
     pub surface0: Option<String>,
     pub surface1: Option<String>,
     pub surface_dim: Option<String>,
