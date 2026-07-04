@@ -193,8 +193,11 @@ impl Palette {
     pub fn tokyo_night_day() -> Self {
         Self {
             accent: Color::Rgb(46, 125, 233),
-            panel_bg: Color::Rgb(225, 226, 231),
-            sidebar_bg: Color::Reset,
+            // Chrome sits one level below the terminal background (#e1e2e7 in
+            // the Ghostty TokyoNight Day theme) so panes read as lighter
+            // content areas, matching the herdr.dev hero mockup.
+            panel_bg: Color::Rgb(216, 217, 224),
+            sidebar_bg: Color::Rgb(216, 217, 224),
             surface0: Color::Rgb(196, 200, 218),
             surface1: Color::Rgb(168, 174, 203),
             surface_dim: Color::Rgb(210, 211, 218),
