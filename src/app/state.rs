@@ -200,7 +200,10 @@ impl Palette {
             sidebar_bg: Color::Rgb(216, 217, 224),
             surface0: Color::Rgb(196, 200, 218),
             surface1: Color::Rgb(168, 174, 203),
-            surface_dim: Color::Rgb(210, 211, 218),
+            // Matches surface0 so the active-row highlight in the sidebar is
+            // the same shade as inactive tab pills (as in the hero mockup);
+            // the stock #d2d3da is nearly invisible on the #d8d9e0 sidebar.
+            surface_dim: Color::Rgb(196, 200, 218),
             overlay0: Color::Rgb(137, 144, 179),
             overlay1: Color::Rgb(104, 112, 154),
             text: Color::Rgb(55, 96, 191),
