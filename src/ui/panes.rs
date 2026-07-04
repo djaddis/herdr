@@ -387,7 +387,7 @@ fn render_pane_borders(app: &AppState, ws: &crate::workspace::Workspace, frame: 
             .pane_infos
             .iter()
             .any(|info| info.is_focused && line_touches_pane(x, y, info, app.pane_gaps));
-        let symbol = line_cell_symbol(line);
+        let symbol = line_cell_symbol(line, app.thick_pane_borders);
         if symbol.is_empty() {
             continue;
         }
@@ -573,8 +573,8 @@ fn render_pane_border_titles(app: &AppState, ws: &crate::workspace::Workspace, f
     }
 }
 
-fn line_cell_symbol(line: LineCell) -> &'static str {
-    match (line.up, line.down, line.left, line.right) {
+fn line_cell_symbol(line: LineCell, thick: bool) -> &'static str {
+    let light = match (line.up, line.down, line.left, line.right) {
         (true, true, true, true) => "┼",
         (true, true, true, false) => "┤",
         (true, true, false, true) => "├",
@@ -591,6 +591,23 @@ fn line_cell_symbol(line: LineCell) -> &'static str {
         (true, false, false, true) => "└",
         (true, false, true, false) => "┘",
         _ => "",
+    };
+    if !thick {
+        return light;
+    }
+    match light {
+        "┼" => "╋",
+        "┤" => "┫",
+        "├" => "┣",
+        "┴" => "┻",
+        "┬" => "┳",
+        "│" => "┃",
+        "─" => "━",
+        "┌" => "┏",
+        "┐" => "┓",
+        "└" => "┗",
+        "┘" => "┛",
+        other => other,
     }
 }
 
@@ -1019,6 +1036,51 @@ mod tests {
         assert_eq!(buffer[(2, 2)].style().fg, Some(app.palette.accent));
         assert_eq!(buffer[(2, 1)].symbol(), "│");
         assert_eq!(buffer[(2, 1)].style().fg, Some(app.palette.accent));
+    }
+
+    #[test]
+    fn thick_pane_borders_use_heavy_box_drawing() {
+        let mut app = AppState::test_new();
+        app.mode = Mode::Terminal;
+        app.thick_pane_borders = true;
+        app.view.terminal_area = Rect::new(0, 0, 6, 4);
+        app.view.pane_infos = vec![
+            PaneInfo {
+                id: PaneId::from_raw(1),
+                rect: Rect::new(0, 0, 3, 4),
+                inner_rect: Rect::default(),
+                scrollbar_rect: None,
+                borders: Borders::ALL,
+                is_focused: true,
+            },
+            PaneInfo {
+                id: PaneId::from_raw(2),
+                rect: Rect::new(3, 0, 3, 4),
+                inner_rect: Rect::default(),
+                scrollbar_rect: None,
+                borders: Borders::ALL,
+                is_focused: false,
+            },
+        ];
+        app.view.split_borders = vec![crate::layout::SplitBorder {
+            pos: 3,
+            direction: ratatui::layout::Direction::Horizontal,
+            ratio: 0.5,
+            area: Rect::new(0, 0, 6, 4),
+            path: vec![],
+        }];
+        let ws = Workspace::test_new("test");
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(6, 4)).unwrap();
+
+        terminal
+            .draw(|frame| render_pane_borders(&app, &ws, frame))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        assert_eq!(buffer[(0, 0)].symbol(), "┏");
+        assert_eq!(buffer[(3, 1)].symbol(), "┃");
+        assert_eq!(buffer[(1, 0)].symbol(), "━");
     }
 
     #[test]

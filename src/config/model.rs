@@ -97,6 +97,20 @@ pub enum AgentPanelSortConfig {
     Priority,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PaneBorderWeightConfig {
+    #[default]
+    Standard,
+    Thick,
+}
+
+impl PaneBorderWeightConfig {
+    pub fn is_thick(self) -> bool {
+        matches!(self, Self::Thick)
+    }
+}
+
 impl AgentPanelSortConfig {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -802,6 +816,8 @@ pub struct UiConfig {
     pub pane_borders: bool,
     /// Keep split panes visually separated instead of sharing divider borders. Default: true.
     pub pane_gaps: bool,
+    /// Line weight for split pane borders. Saved values are "standard" or "thick". Default: "standard".
+    pub pane_border_weight: PaneBorderWeightConfig,
     /// Show agent labels in split pane borders when no manual pane label is set. Default: false.
     pub show_agent_labels_on_pane_borders: bool,
     /// Hide the tab row when the workspace has one tab. Default: false.
@@ -997,6 +1013,7 @@ impl Default for UiConfig {
             prompt_new_tab_name: true,
             pane_borders: true,
             pane_gaps: true,
+            pane_border_weight: PaneBorderWeightConfig::Standard,
             show_agent_labels_on_pane_borders: false,
             hide_tab_bar_when_single_tab: false,
             agent_panel_sort: AgentPanelSortConfig::Spaces,
@@ -1209,6 +1226,7 @@ agent_panel_scope = "current"
         let default_config = Config::default();
         assert!(default_config.ui.pane_borders);
         assert!(default_config.ui.pane_gaps);
+        assert!(!default_config.ui.pane_border_weight.is_thick());
         assert!(!default_config.ui.show_agent_labels_on_pane_borders);
         assert!(!default_config.ui.hide_tab_bar_when_single_tab);
 
