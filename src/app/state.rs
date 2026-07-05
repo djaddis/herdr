@@ -206,9 +206,10 @@ impl Palette {
             // content areas, matching the herdr.dev hero mockup.
             panel_bg: Color::Rgb(216, 217, 224),
             sidebar_bg: Color::Rgb(216, 217, 224),
-            // Same shade as the chrome so unfocused pane borders read as
-            // part of it, rather than the darker overlay0 grey-blue.
-            pane_border_inactive: Color::Rgb(216, 217, 224),
+            // Same shade as the sidebar selection highlight / inactive tab
+            // pills (surface0/surface_dim below) so unfocused pane borders
+            // sit one step below the chrome, not the dark overlay0 grey-blue.
+            pane_border_inactive: Color::Rgb(196, 200, 218),
             surface0: Color::Rgb(196, 200, 218),
             surface1: Color::Rgb(168, 174, 203),
             // Matches surface0 so the active-row highlight in the sidebar is
