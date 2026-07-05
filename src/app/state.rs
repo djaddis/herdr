@@ -66,6 +66,10 @@ pub struct Palette {
     /// built-in themes) inherits the host terminal background, matching the
     /// behavior before this token existed.
     pub sidebar_bg: Color,
+    /// Border color for unfocused panes. `Reset` (the default for all
+    /// built-in themes) falls back to `overlay0`, matching the behavior
+    /// before this token existed. Focused panes always use `accent`.
+    pub pane_border_inactive: Color,
     /// Subtle surface background for selected/focused items.
     pub surface0: Color,
     /// Slightly lighter surface for hover/active states.
@@ -103,6 +107,7 @@ impl Palette {
             accent: Color::Rgb(137, 180, 250), // blue
             panel_bg: Color::Rgb(24, 24, 37),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(49, 50, 68),
             surface1: Color::Rgb(69, 71, 90),
             surface_dim: Color::Rgb(30, 30, 46),
@@ -126,6 +131,7 @@ impl Palette {
             accent: Color::Rgb(30, 102, 245),
             panel_bg: Color::Rgb(239, 241, 245),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(204, 208, 218),
             surface1: Color::Rgb(188, 192, 204),
             surface_dim: Color::Rgb(230, 233, 239),
@@ -149,6 +155,7 @@ impl Palette {
             accent: Color::Blue,
             panel_bg: Color::Reset,
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Reset,
             surface1: Color::DarkGray,
             surface_dim: Color::DarkGray,
@@ -172,6 +179,7 @@ impl Palette {
             accent: Color::Rgb(122, 162, 247), // blue
             panel_bg: Color::Rgb(26, 27, 38),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(36, 40, 59),
             surface1: Color::Rgb(65, 72, 104),
             surface_dim: Color::Rgb(26, 27, 38),
@@ -198,6 +206,9 @@ impl Palette {
             // content areas, matching the herdr.dev hero mockup.
             panel_bg: Color::Rgb(216, 217, 224),
             sidebar_bg: Color::Rgb(216, 217, 224),
+            // Same shade as the chrome so unfocused pane borders read as
+            // part of it, rather than the darker overlay0 grey-blue.
+            pane_border_inactive: Color::Rgb(216, 217, 224),
             surface0: Color::Rgb(196, 200, 218),
             surface1: Color::Rgb(168, 174, 203),
             // Matches surface0 so the active-row highlight in the sidebar is
@@ -224,6 +235,7 @@ impl Palette {
             accent: Color::Rgb(189, 147, 249), // purple
             panel_bg: Color::Rgb(40, 42, 54),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(68, 71, 90),
             surface1: Color::Rgb(98, 114, 164),
             surface_dim: Color::Rgb(40, 42, 54),
@@ -247,6 +259,7 @@ impl Palette {
             accent: Color::Rgb(136, 192, 208), // frost
             panel_bg: Color::Rgb(46, 52, 64),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(59, 66, 82),
             surface1: Color::Rgb(67, 76, 94),
             surface_dim: Color::Rgb(46, 52, 64),
@@ -270,6 +283,7 @@ impl Palette {
             accent: Color::Rgb(215, 153, 33), // yellow
             panel_bg: Color::Rgb(40, 40, 40),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(60, 56, 54),
             surface1: Color::Rgb(80, 73, 69),
             surface_dim: Color::Rgb(40, 40, 40),
@@ -293,6 +307,7 @@ impl Palette {
             accent: Color::Rgb(7, 102, 120),
             panel_bg: Color::Rgb(251, 241, 199),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(235, 219, 178),
             surface1: Color::Rgb(213, 196, 161),
             surface_dim: Color::Rgb(242, 229, 188),
@@ -316,6 +331,7 @@ impl Palette {
             accent: Color::Rgb(97, 175, 239), // blue
             panel_bg: Color::Rgb(40, 44, 52),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(44, 49, 58),
             surface1: Color::Rgb(62, 68, 81),
             surface_dim: Color::Rgb(40, 44, 52),
@@ -339,6 +355,7 @@ impl Palette {
             accent: Color::Rgb(64, 120, 242),
             panel_bg: Color::Rgb(250, 250, 250),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(240, 240, 241),
             surface1: Color::Rgb(229, 229, 230),
             surface_dim: Color::Rgb(245, 245, 246),
@@ -362,6 +379,7 @@ impl Palette {
             accent: Color::Rgb(38, 139, 210), // blue
             panel_bg: Color::Rgb(0, 43, 54),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(7, 54, 66),
             surface1: Color::Rgb(88, 110, 117),
             surface_dim: Color::Rgb(0, 43, 54),
@@ -385,6 +403,7 @@ impl Palette {
             accent: Color::Rgb(38, 139, 210),
             panel_bg: Color::Rgb(253, 246, 227),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(238, 232, 213),
             surface1: Color::Rgb(147, 161, 161),
             surface_dim: Color::Rgb(238, 232, 213),
@@ -408,6 +427,7 @@ impl Palette {
             accent: Color::Rgb(126, 156, 216), // blue
             panel_bg: Color::Rgb(31, 31, 40),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(42, 42, 55),
             surface1: Color::Rgb(54, 54, 70),
             surface_dim: Color::Rgb(31, 31, 40),
@@ -431,6 +451,7 @@ impl Palette {
             accent: Color::Rgb(77, 105, 155),
             panel_bg: Color::Rgb(242, 236, 188),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(220, 213, 172),
             surface1: Color::Rgb(201, 203, 209),
             surface_dim: Color::Rgb(213, 206, 163),
@@ -454,6 +475,7 @@ impl Palette {
             accent: Color::Rgb(196, 167, 231), // iris
             panel_bg: Color::Rgb(25, 23, 36),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(31, 29, 46),
             surface1: Color::Rgb(38, 35, 58),
             surface_dim: Color::Rgb(25, 23, 36),
@@ -477,6 +499,7 @@ impl Palette {
             accent: Color::Rgb(144, 122, 169),
             panel_bg: Color::Rgb(250, 244, 237),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(242, 233, 225),
             surface1: Color::Rgb(255, 250, 243),
             surface_dim: Color::Rgb(242, 233, 225),
@@ -500,6 +523,7 @@ impl Palette {
             accent: Color::Rgb(255, 199, 153),
             panel_bg: Color::Rgb(26, 26, 26),
             sidebar_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(35, 35, 35),
             surface1: Color::Rgb(40, 40, 40),
             surface_dim: Color::Rgb(16, 16, 16),
@@ -542,6 +566,16 @@ impl Palette {
         }
     }
 
+    /// Border color for unfocused panes: `pane_border_inactive` when set,
+    /// otherwise the historical `overlay0`.
+    pub fn inactive_pane_border(&self) -> Color {
+        if self.pane_border_inactive == Color::Reset {
+            self.overlay0
+        } else {
+            self.pane_border_inactive
+        }
+    }
+
     /// Apply custom color overrides on top of this palette.
     pub fn with_overrides(mut self, custom: &crate::config::CustomThemeColors) -> Self {
         use crate::config::parse_color;
@@ -553,6 +587,9 @@ impl Palette {
         }
         if let Some(c) = &custom.sidebar_bg {
             self.sidebar_bg = parse_color(c);
+        }
+        if let Some(c) = &custom.pane_border_inactive {
+            self.pane_border_inactive = parse_color(c);
         }
         if let Some(c) = &custom.surface0 {
             self.surface0 = parse_color(c);

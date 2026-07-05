@@ -125,9 +125,12 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Accepts: hex (#rrggbb), named colors, rgb(r,g,b), or panel_bg = "reset"
 # sidebar_bg paints the sidebar body; "reset" (the default) inherits the
 # host terminal background.
+# pane_border_inactive colors the borders of unfocused panes; "reset" (the
+# default) uses overlay0. Focused panes always use accent.
 # [theme.custom]
 # panel_bg = "reset"
 # sidebar_bg = "reset"
+# pane_border_inactive = "reset"
 # accent = "#f5c2e7"
 # red = "#ff6188"
 # green = "#a6e3a1"

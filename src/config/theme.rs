@@ -33,6 +33,7 @@ pub struct CustomThemeColors {
     pub accent: Option<String>,
     pub panel_bg: Option<String>,
     pub sidebar_bg: Option<String>,
+    pub pane_border_inactive: Option<String>,
     pub surface0: Option<String>,
     pub surface1: Option<String>,
     pub surface_dim: Option<String>,
@@ -167,6 +168,7 @@ name = "nord"
 panel_bg = "#1e1e2e"
 accent = "#ff79c6"
 red = "rgb(255, 85, 85)"
+pane_border_inactive = "#d8d9e0"
 "##;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.theme.name.as_deref(), Some("nord"));
@@ -174,6 +176,7 @@ red = "rgb(255, 85, 85)"
         assert_eq!(custom.panel_bg.as_deref(), Some("#1e1e2e"));
         assert_eq!(custom.accent.as_deref(), Some("#ff79c6"));
         assert_eq!(custom.red.as_deref(), Some("rgb(255, 85, 85)"));
+        assert_eq!(custom.pane_border_inactive.as_deref(), Some("#d8d9e0"));
         assert!(custom.green.is_none());
     }
 
