@@ -1565,6 +1565,55 @@ next_tab = ["prefix+n", "ctrl+alt+]"]
     }
 
     #[test]
+    fn familiar_direct_shortcuts_parse() {
+        let config: Config = toml::from_str(
+            r#"
+[keys]
+previous_tab = ["prefix+p", "ctrl+left"]
+next_tab = ["prefix+n", "ctrl+right"]
+focus_pane_left = ["prefix+h", "ctrl+option+left"]
+focus_pane_down = ["prefix+j", "ctrl+option+down"]
+focus_pane_up = ["prefix+k", "ctrl+option+up"]
+focus_pane_right = ["prefix+l", "ctrl+option+right"]
+split_vertical = ["prefix+v", "cmd+d"]
+split_horizontal = ["prefix+minus", "cmd+shift+d"]
+"#,
+        )
+        .unwrap();
+        let kb = config.keybinds();
+
+        assert!(kb
+            .previous_tab
+            .matches_direct_key(TerminalKey::new(KeyCode::Left, KeyModifiers::CONTROL)));
+        assert!(kb
+            .next_tab
+            .matches_direct_key(TerminalKey::new(KeyCode::Right, KeyModifiers::CONTROL)));
+        assert!(kb.focus_pane_left.matches_direct_key(TerminalKey::new(
+            KeyCode::Left,
+            KeyModifiers::CONTROL | KeyModifiers::ALT
+        )));
+        assert!(kb.focus_pane_down.matches_direct_key(TerminalKey::new(
+            KeyCode::Down,
+            KeyModifiers::CONTROL | KeyModifiers::ALT
+        )));
+        assert!(kb.focus_pane_up.matches_direct_key(TerminalKey::new(
+            KeyCode::Up,
+            KeyModifiers::CONTROL | KeyModifiers::ALT
+        )));
+        assert!(kb.focus_pane_right.matches_direct_key(TerminalKey::new(
+            KeyCode::Right,
+            KeyModifiers::CONTROL | KeyModifiers::ALT
+        )));
+        assert!(kb
+            .split_vertical
+            .matches_direct_key(TerminalKey::new(KeyCode::Char('d'), KeyModifiers::SUPER)));
+        assert!(kb.split_horizontal.matches_direct_key(TerminalKey::new(
+            KeyCode::Char('d'),
+            KeyModifiers::SUPER | KeyModifiers::SHIFT
+        )));
+    }
+
+    #[test]
     fn unsafe_direct_printable_binding_is_disabled_with_diagnostic() {
         let config: Config = toml::from_str(
             r#"

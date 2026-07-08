@@ -808,6 +808,8 @@ pub struct UiConfig {
     pub redraw_on_focus_gained: bool,
     /// Lines to scroll per mouse wheel notch. Default: 3.
     pub mouse_scroll_lines: Option<NonZeroUsize>,
+    /// Draw scrollbars for panes, sidebars, modals, and mobile switchers. Default: true.
+    pub show_scrollbars: bool,
     /// Ask for confirmation before closing a workspace. Default: true.
     pub confirm_close: bool,
     /// Ask for a tab name before creating a new tab. Default: true.
@@ -1009,6 +1011,7 @@ impl Default for UiConfig {
             right_click_passthrough_modifier: RightClickPassthroughModifierConfig::default(),
             redraw_on_focus_gained: true,
             mouse_scroll_lines: None,
+            show_scrollbars: true,
             confirm_close: true,
             prompt_new_tab_name: true,
             pane_borders: true,
@@ -1227,6 +1230,7 @@ agent_panel_scope = "current"
         assert!(default_config.ui.pane_borders);
         assert!(default_config.ui.pane_gaps);
         assert!(!default_config.ui.pane_border_weight.is_thick());
+        assert!(default_config.ui.show_scrollbars);
         assert!(!default_config.ui.show_agent_labels_on_pane_borders);
         assert!(!default_config.ui.hide_tab_bar_when_single_tab);
 
@@ -1234,12 +1238,14 @@ agent_panel_scope = "current"
 [ui]
 pane_borders = false
 pane_gaps = true
+show_scrollbars = false
 show_agent_labels_on_pane_borders = true
 hide_tab_bar_when_single_tab = true
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.ui.pane_borders);
         assert!(config.ui.pane_gaps);
+        assert!(!config.ui.show_scrollbars);
         assert!(config.ui.show_agent_labels_on_pane_borders);
         assert!(config.ui.hide_tab_bar_when_single_tab);
     }

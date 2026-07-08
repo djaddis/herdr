@@ -247,6 +247,9 @@ fn render_navigator_scrollbar(
     if body.width <= 1 || body.height == 0 {
         return;
     }
+    if !app.show_scrollbars {
+        return;
+    }
     let rows = app.navigator_rows_from(terminal_runtimes).len();
     let viewport = body.height as usize;
     if rows <= viewport {

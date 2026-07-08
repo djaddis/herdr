@@ -419,6 +419,13 @@ Existing panes keep their current buffer until they are recreated.
 
 Panes only show a scrollbar when the app writes to the primary screen. Full-screen apps that switch to the alternate screen (vim, htop, Claude Code with `CLAUDE_CODE_NO_FLICKER=1`) produce no scrollback, so no scrollbar appears and wheel events are routed to the app instead. Scroll with the app's own keys or UI.
 
+To hide Herdr's visual scrollbars while keeping wheel and keyboard scrolling enabled:
+
+```toml
+[ui]
+show_scrollbars = false
+```
+
 ## Pane screen history
 
 By default, full session restart restores workspaces, tabs, panes, cwd, layout, and focus without saving pane contents.

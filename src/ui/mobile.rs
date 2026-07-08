@@ -131,7 +131,7 @@ pub(crate) fn mobile_switcher_target_at(
     row: u16,
 ) -> Option<MobileSwitcherTarget> {
     let areas = mobile_switcher_areas(app);
-    let content = inset_for_left_scrollbar(areas.viewport);
+    let content = mobile_switcher_content_rect(app, areas.viewport);
     if !rect_contains(content, col, row) {
         return None;
     }
@@ -476,15 +476,17 @@ fn render_mobile_switcher_content(
 
     let p = &app.palette;
     let total_height = mobile_switcher_content_height(app);
-    render_left_scrollbar(
-        frame,
-        viewport,
-        total_height,
-        viewport.height as usize,
-        app.mobile_switcher_scroll,
-        p,
-    );
-    let content = inset_for_left_scrollbar(viewport);
+    if app.show_scrollbars {
+        render_left_scrollbar(
+            frame,
+            viewport,
+            total_height,
+            viewport.height as usize,
+            app.mobile_switcher_scroll,
+            p,
+        );
+    }
+    let content = mobile_switcher_content_rect(app, viewport);
     if content == Rect::default() {
         return;
     }
@@ -869,6 +871,14 @@ fn inset_for_left_scrollbar(area: Rect) -> Rect {
         return Rect::default();
     }
     Rect::new(area.x + 1, area.y, area.width - 1, area.height)
+}
+
+fn mobile_switcher_content_rect(app: &AppState, area: Rect) -> Rect {
+    if app.show_scrollbars {
+        inset_for_left_scrollbar(area)
+    } else {
+        area
+    }
 }
 
 fn render_left_scrollbar(

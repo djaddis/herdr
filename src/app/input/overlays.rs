@@ -419,7 +419,7 @@ impl AppState {
 
         let full_width = body.width.max(1);
         let mut total_rows = rows_for_width(full_width);
-        let wrap_width = if total_rows > viewport_rows && full_width > 1 {
+        let wrap_width = if self.show_scrollbars && total_rows > viewport_rows && full_width > 1 {
             body.width.saturating_sub(1).max(1)
         } else {
             full_width
@@ -445,6 +445,9 @@ impl AppState {
         col: u16,
         row: u16,
     ) -> Option<ScrollbarClickTarget> {
+        if !self.show_scrollbars {
+            return None;
+        }
         let body = self.release_notes_body_rect()?;
         let metrics = self.release_notes_scroll_metrics()?;
         let track = crate::ui::release_notes_scrollbar_rect(body, metrics)?;
@@ -465,6 +468,9 @@ impl AppState {
     }
 
     fn release_notes_offset_for_drag_row(&self, row: u16, grab_row_offset: u16) -> Option<usize> {
+        if !self.show_scrollbars {
+            return None;
+        }
         let body = self.release_notes_body_rect()?;
         let metrics = self.release_notes_scroll_metrics()?;
         let track = crate::ui::release_notes_scrollbar_rect(body, metrics)?;
@@ -518,7 +524,7 @@ impl AppState {
 
         let full_width = body.width.max(1);
         let mut total_rows = rows_for_width(full_width);
-        let wrap_width = if total_rows > viewport_rows && full_width > 1 {
+        let wrap_width = if self.show_scrollbars && total_rows > viewport_rows && full_width > 1 {
             body.width.saturating_sub(1).max(1)
         } else {
             full_width
@@ -544,6 +550,9 @@ impl AppState {
         col: u16,
         row: u16,
     ) -> Option<ScrollbarClickTarget> {
+        if !self.show_scrollbars {
+            return None;
+        }
         let body = self.product_announcement_body_rect()?;
         let metrics = self.product_announcement_scroll_metrics()?;
         let track = crate::ui::release_notes_scrollbar_rect(body, metrics)?;
@@ -568,6 +577,9 @@ impl AppState {
         row: u16,
         grab_row_offset: u16,
     ) -> Option<usize> {
+        if !self.show_scrollbars {
+            return None;
+        }
         let body = self.product_announcement_body_rect()?;
         let metrics = self.product_announcement_scroll_metrics()?;
         let track = crate::ui::release_notes_scrollbar_rect(body, metrics)?;
@@ -639,11 +651,23 @@ impl AppState {
     fn keybind_help_scroll_metrics(&self) -> Option<crate::pane::ScrollMetrics> {
         let body = self.keybind_help_body_rect()?;
         let viewport_rows = body.height.max(1) as usize;
-        let wrap_width = body.width.max(1) as usize;
-        let total_rows = crate::ui::keybind_help_lines(self)
-            .into_iter()
-            .map(|(width, _)| width.max(1).div_ceil(wrap_width))
-            .sum::<usize>();
+        let lines = crate::ui::keybind_help_lines(self);
+        let rows_for_width = |wrap_width: u16| {
+            let wrap_width = wrap_width.max(1) as usize;
+            lines
+                .iter()
+                .map(|(width, _)| (*width).max(1).div_ceil(wrap_width))
+                .sum::<usize>()
+        };
+
+        let full_width = body.width.max(1);
+        let mut total_rows = rows_for_width(full_width);
+        let wrap_width = if self.show_scrollbars && total_rows > viewport_rows && full_width > 1 {
+            body.width.saturating_sub(1).max(1)
+        } else {
+            full_width
+        };
+        total_rows = rows_for_width(wrap_width);
         let max_offset_from_bottom = total_rows.saturating_sub(viewport_rows);
         Some(crate::pane::ScrollMetrics {
             offset_from_bottom: max_offset_from_bottom
@@ -654,6 +678,9 @@ impl AppState {
     }
 
     fn keybind_help_scrollbar_target_at(&self, col: u16, row: u16) -> Option<ScrollbarClickTarget> {
+        if !self.show_scrollbars {
+            return None;
+        }
         let body = self.keybind_help_body_rect()?;
         let metrics = self.keybind_help_scroll_metrics()?;
         let track = crate::ui::release_notes_scrollbar_rect(body, metrics)?;
@@ -674,6 +701,9 @@ impl AppState {
     }
 
     fn keybind_help_offset_for_drag_row(&self, row: u16, grab_row_offset: u16) -> Option<usize> {
+        if !self.show_scrollbars {
+            return None;
+        }
         let body = self.keybind_help_body_rect()?;
         let metrics = self.keybind_help_scroll_metrics()?;
         let track = crate::ui::release_notes_scrollbar_rect(body, metrics)?;

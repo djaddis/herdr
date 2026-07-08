@@ -280,6 +280,9 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Pane scrollback lines to scroll per mouse wheel notch.
 # mouse_scroll_lines = 3
 
+# Draw scrollbars for panes, sidebars, modals, and mobile switchers.
+# show_scrollbars = true
+
 # Ask for confirmation before closing a workspace
 # confirm_close = true
 

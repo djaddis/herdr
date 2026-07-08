@@ -90,7 +90,10 @@ pub(super) fn render_release_notes_overlay(app: &AppState, frame: &mut Frame, ar
         max_offset_from_bottom: app.release_notes_max_scroll() as usize,
         viewport_rows: notes_body.height.max(1) as usize,
     };
-    let track = release_notes_scrollbar_rect(notes_body, metrics);
+    let track = app
+        .show_scrollbars
+        .then(|| release_notes_scrollbar_rect(notes_body, metrics))
+        .flatten();
     let notes_text_area = track
         .map(|_| {
             Rect::new(
@@ -201,7 +204,10 @@ pub(super) fn render_product_announcement_overlay(app: &AppState, frame: &mut Fr
         max_offset_from_bottom: app.product_announcement_max_scroll() as usize,
         viewport_rows: body_rect.height.max(1) as usize,
     };
-    let track = release_notes_scrollbar_rect(body_rect, metrics);
+    let track = app
+        .show_scrollbars
+        .then(|| release_notes_scrollbar_rect(body_rect, metrics))
+        .flatten();
     let text_area = track
         .map(|_| {
             Rect::new(

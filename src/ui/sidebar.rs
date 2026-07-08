@@ -486,6 +486,9 @@ pub(crate) fn workspace_list_scroll_metrics(
 }
 
 pub(crate) fn workspace_list_scrollbar_rect(app: &AppState, area: Rect) -> Option<Rect> {
+    if !app.show_scrollbars {
+        return None;
+    }
     let metrics = workspace_list_scroll_metrics(app, area);
     let body = workspace_list_body_rect(area, true);
     (should_show_scrollbar(metrics) && body.width > 0 && body.height > 0).then_some(Rect::new(
@@ -541,6 +544,9 @@ pub(crate) fn agent_panel_scroll_metrics(app: &AppState, area: Rect) -> crate::p
 }
 
 pub(crate) fn agent_panel_scrollbar_rect(app: &AppState, area: Rect) -> Option<Rect> {
+    if !app.show_scrollbars {
+        return None;
+    }
     let metrics = agent_panel_scroll_metrics(app, area);
     let body = agent_panel_body_rect(area, true);
     (should_show_scrollbar(metrics) && body.width > 0 && body.height > 0).then_some(Rect::new(
@@ -561,7 +567,10 @@ pub(crate) fn compute_workspace_list_areas(
     }
 
     let metrics = workspace_list_scroll_metrics(app, ws_area);
-    let body = workspace_list_body_rect(ws_area, should_show_scrollbar(metrics));
+    let body = workspace_list_body_rect(
+        ws_area,
+        app.show_scrollbars && should_show_scrollbar(metrics),
+    );
     if body.width == 0 || body.height == 0 {
         return (Vec::new(), Vec::new());
     }
@@ -1073,7 +1082,7 @@ fn render_agent_detail(
     let details = agent_panel_entries_from(app, terminal_runtimes);
     let metrics = agent_panel_scroll_metrics(app, area);
     let scrollbar_rect = agent_panel_scrollbar_rect(app, area);
-    let body = agent_panel_body_rect(area, should_show_scrollbar(metrics));
+    let body = agent_panel_body_rect(area, app.show_scrollbars && should_show_scrollbar(metrics));
     if body == Rect::default() {
         return;
     }

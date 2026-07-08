@@ -260,7 +260,10 @@ pub(super) fn render_keybind_help_overlay(app: &AppState, frame: &mut Frame) {
         max_offset_from_bottom: app.keybind_help_max_scroll() as usize,
         viewport_rows: body_area.height.max(1) as usize,
     };
-    let track = release_notes_scrollbar_rect(body_area, metrics);
+    let track = app
+        .show_scrollbars
+        .then(|| release_notes_scrollbar_rect(body_area, metrics))
+        .flatten();
     let text_area = track
         .map(|_| {
             Rect::new(
