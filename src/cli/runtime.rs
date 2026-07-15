@@ -1,9 +1,9 @@
 use crate::api::schema::{
-    EmptyParams, Method, PaneFocusDirectionParams, PaneMoveParams, PaneRenameParams,
-    PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget, PaneZoomParams, Request,
-    TabCreateParams, TabListParams, TabRenameParams, TabTarget, WorkspaceCreateParams,
-    WorkspaceRenameParams, WorkspaceTarget, WorktreeCreateParams, WorktreeListParams,
-    WorktreeOpenParams, WorktreeRemoveParams,
+    EmptyParams, Method, PaneFocusDirectionParams, PaneMoveParams, PaneReadableWidthParams,
+    PaneRenameParams, PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget,
+    PaneZoomParams, Request, TabCreateParams, TabListParams, TabRenameParams, TabTarget,
+    WorkspaceCreateParams, WorkspaceRenameParams, WorkspaceTarget, WorktreeCreateParams,
+    WorktreeListParams, WorktreeOpenParams, WorktreeRemoveParams,
 };
 
 fn print_method_response(id: &'static str, method: Method) -> std::io::Result<i32> {
@@ -99,6 +99,10 @@ pub(super) fn pane_resize(params: PaneResizeParams) -> std::io::Result<i32> {
 
 pub(super) fn pane_zoom(params: PaneZoomParams) -> std::io::Result<i32> {
     print_method_response("cli:pane:zoom", Method::PaneZoom(params))
+}
+
+pub(super) fn pane_readable_width(params: PaneReadableWidthParams) -> std::io::Result<i32> {
+    print_method_response("cli:pane:readable_width", Method::PaneReadableWidth(params))
 }
 
 pub(super) fn pane_rename(params: PaneRenameParams) -> std::io::Result<i32> {

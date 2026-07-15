@@ -1,6 +1,6 @@
 //! BSP tree layout for tiling panes within a workspace.
 
-use std::cmp::Reverse;
+use std::{cmp::Reverse, collections::HashMap};
 
 use ratatui::{
     layout::{Direction, Rect},
@@ -110,15 +110,25 @@ impl TileLayout {
 
     /// Compute rects for all panes given the available area.
     pub fn panes(&self, area: Rect) -> Vec<PaneInfo> {
+        self.panes_capped(area, &HashMap::new())
+    }
+
+    /// Compute pane rects honoring per-pane max outer widths.
+    pub fn panes_capped(&self, area: Rect, caps: &HashMap<PaneId, u16>) -> Vec<PaneInfo> {
         let mut result = Vec::new();
-        collect_panes(&self.root, area, self.focus, &mut result);
+        collect_panes_capped(&self.root, area, self.focus, caps, &mut result);
         result
     }
 
     /// Collect all split boundaries for mouse drag resize.
     pub fn splits(&self, area: Rect) -> Vec<SplitBorder> {
+        self.splits_capped(area, &HashMap::new())
+    }
+
+    /// Collect split boundaries honoring per-pane max outer widths.
+    pub fn splits_capped(&self, area: Rect, caps: &HashMap<PaneId, u16>) -> Vec<SplitBorder> {
         let mut result = Vec::new();
-        collect_splits(&self.root, area, vec![], &mut result);
+        collect_splits_capped(&self.root, area, caps, vec![], &mut result);
         result
     }
 
@@ -410,13 +420,19 @@ fn count_panes(node: &Node) -> usize {
     }
 }
 
-fn collect_panes(node: &Node, area: Rect, focus: PaneId, result: &mut Vec<PaneInfo>) {
+fn collect_panes_capped(
+    node: &Node,
+    area: Rect,
+    focus: PaneId,
+    caps: &HashMap<PaneId, u16>,
+    result: &mut Vec<PaneInfo>,
+) {
+    let area = shrink_to_desired(area, desired_width(node, caps));
     match node {
         Node::Pane(id) => {
             result.push(PaneInfo {
                 id: *id,
                 rect: area,
-                // inner_rect is set during render when we know if borders are shown
                 inner_rect: area,
                 scrollbar_rect: None,
                 borders: Borders::NONE,
@@ -429,14 +445,20 @@ fn collect_panes(node: &Node, area: Rect, focus: PaneId, result: &mut Vec<PaneIn
             first,
             second,
         } => {
-            let (a, b) = split_rect(area, *direction, *ratio);
-            collect_panes(first, a, focus, result);
-            collect_panes(second, b, focus, result);
+            let (a, b) = split_rect_capped(area, *direction, *ratio, first, second, caps);
+            collect_panes_capped(first, a, focus, caps, result);
+            collect_panes_capped(second, b, focus, caps, result);
         }
     }
 }
 
-fn collect_splits(node: &Node, area: Rect, path: Vec<bool>, result: &mut Vec<SplitBorder>) {
+fn collect_splits_capped(
+    node: &Node,
+    area: Rect,
+    caps: &HashMap<PaneId, u16>,
+    path: Vec<bool>,
+    result: &mut Vec<SplitBorder>,
+) {
     if let Node::Split {
         direction,
         ratio,
@@ -444,7 +466,8 @@ fn collect_splits(node: &Node, area: Rect, path: Vec<bool>, result: &mut Vec<Spl
         second,
     } = node
     {
-        let (a, b) = split_rect(area, *direction, *ratio);
+        let area = shrink_to_desired(area, desired_width(node, caps));
+        let (a, b) = split_rect_capped(area, *direction, *ratio, first, second, caps);
         let pos = match direction {
             Direction::Horizontal => a.x + a.width,
             Direction::Vertical => a.y + a.height,
@@ -458,10 +481,10 @@ fn collect_splits(node: &Node, area: Rect, path: Vec<bool>, result: &mut Vec<Spl
         });
         let mut lp = path.clone();
         lp.push(false);
-        collect_splits(first, a, lp, result);
+        collect_splits_capped(first, a, caps, lp, result);
         let mut rp = path;
         rp.push(true);
-        collect_splits(second, b, rp, result);
+        collect_splits_capped(second, b, caps, rp, result);
     }
 }
 
@@ -639,6 +662,88 @@ fn split_rect(area: Rect, direction: Direction, ratio: f32) -> (Rect, Rect) {
     }
 }
 
+fn desired_width(node: &Node, caps: &HashMap<PaneId, u16>) -> Option<u16> {
+    match node {
+        Node::Pane(id) => caps.get(id).copied(),
+        Node::Split {
+            direction: Direction::Horizontal,
+            first,
+            second,
+            ..
+        } => Some(desired_width(first, caps)?.saturating_add(desired_width(second, caps)?)),
+        Node::Split {
+            direction: Direction::Vertical,
+            first,
+            second,
+            ..
+        } => Some(desired_width(first, caps)?.max(desired_width(second, caps)?)),
+    }
+}
+
+pub(crate) fn shrink_to_desired(area: Rect, desired: Option<u16>) -> Rect {
+    match desired {
+        Some(width) if width < area.width => Rect::new(
+            area.x + (area.width - width) / 2,
+            area.y,
+            width,
+            area.height,
+        ),
+        _ => area,
+    }
+}
+
+fn split_rect_capped(
+    area: Rect,
+    direction: Direction,
+    ratio: f32,
+    first: &Node,
+    second: &Node,
+    caps: &HashMap<PaneId, u16>,
+) -> (Rect, Rect) {
+    if direction == Direction::Vertical {
+        return split_rect(area, direction, ratio);
+    }
+
+    let fallback = || split_rect(area, direction, ratio);
+    let ratio_first_w = ((area.width as f32) * ratio).round() as u16;
+    match (desired_width(first, caps), desired_width(second, caps)) {
+        (Some(first_w), Some(second_w)) => {
+            let desired = first_w.saturating_add(second_w);
+            if desired == 0 || desired > area.width {
+                return fallback();
+            }
+            (
+                Rect::new(area.x, area.y, first_w, area.height),
+                Rect::new(area.x + first_w, area.y, second_w, area.height),
+            )
+        }
+        (Some(cap), None) => {
+            let first_w = ratio_first_w.min(cap);
+            let second_w = area.width.saturating_sub(first_w);
+            if first_w == 0 || second_w == 0 {
+                return fallback();
+            }
+            (
+                Rect::new(area.x, area.y, first_w, area.height),
+                Rect::new(area.x + first_w, area.y, second_w, area.height),
+            )
+        }
+        (None, Some(cap)) => {
+            let ratio_second_w = area.width.saturating_sub(ratio_first_w);
+            let second_w = ratio_second_w.min(cap);
+            let first_w = area.width.saturating_sub(second_w);
+            if first_w == 0 || second_w == 0 {
+                return fallback();
+            }
+            (
+                Rect::new(area.x, area.y, first_w, area.height),
+                Rect::new(area.x + first_w, area.y, second_w, area.height),
+            )
+        }
+        (None, None) => fallback(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -682,6 +787,14 @@ mod tests {
             .into_iter()
             .find_map(|(id, rect)| (id == pane_id).then_some(rect))
             .expect("pane should exist")
+    }
+
+    fn capped_pane_rects(layout: &TileLayout, caps: &HashMap<PaneId, u16>) -> Vec<(PaneId, Rect)> {
+        layout
+            .panes_capped(Rect::new(0, 0, 100, 40), caps)
+            .into_iter()
+            .map(|info| (info.id, info.rect))
+            .collect()
     }
 
     fn split_snapshot(layout: &TileLayout) -> Vec<(Direction, f32)> {
@@ -953,5 +1066,159 @@ mod tests {
             find_in_direction(&focused, NavDirection::Left, &panes),
             Some(pane(3))
         );
+    }
+
+    #[test]
+    fn capped_single_pane_centers_within_available_width() {
+        let layout = TileLayout::from_saved(Node::Pane(pane(1)), pane(1));
+        let caps = HashMap::from([(pane(1), 50)]);
+
+        assert_eq!(
+            layout.panes_capped(Rect::new(0, 0, 100, 40), &caps)[0].rect,
+            Rect::new(25, 0, 50, 40)
+        );
+    }
+
+    #[test]
+    fn capped_horizontal_panes_bunch_at_center() {
+        let layout = TileLayout::from_saved(
+            Node::Split {
+                direction: Direction::Horizontal,
+                ratio: 0.5,
+                first: Box::new(Node::Pane(pane(1))),
+                second: Box::new(Node::Pane(pane(2))),
+            },
+            pane(1),
+        );
+        let caps = HashMap::from([(pane(1), 30), (pane(2), 30)]);
+
+        assert_eq!(
+            capped_pane_rects(&layout, &caps),
+            vec![
+                (pane(1), Rect::new(20, 0, 30, 40)),
+                (pane(2), Rect::new(50, 0, 30, 40)),
+            ]
+        );
+        assert_eq!(
+            layout.splits_capped(Rect::new(0, 0, 100, 40), &caps)[0].pos,
+            50
+        );
+    }
+
+    #[test]
+    fn three_capped_horizontal_panes_bunch_at_center() {
+        let layout = TileLayout::from_saved(
+            Node::Split {
+                direction: Direction::Horizontal,
+                ratio: 0.5,
+                first: Box::new(Node::Split {
+                    direction: Direction::Horizontal,
+                    ratio: 0.5,
+                    first: Box::new(Node::Pane(pane(1))),
+                    second: Box::new(Node::Pane(pane(2))),
+                }),
+                second: Box::new(Node::Pane(pane(3))),
+            },
+            pane(1),
+        );
+        let caps = HashMap::from([(pane(1), 30), (pane(2), 30), (pane(3), 30)]);
+
+        assert_eq!(
+            layout
+                .panes_capped(Rect::new(0, 0, 120, 40), &caps)
+                .into_iter()
+                .map(|info| (info.id, info.rect))
+                .collect::<Vec<_>>(),
+            vec![
+                (pane(1), Rect::new(15, 0, 30, 40)),
+                (pane(2), Rect::new(45, 0, 30, 40)),
+                (pane(3), Rect::new(75, 0, 30, 40)),
+            ]
+        );
+    }
+
+    #[test]
+    fn capped_and_uncapped_horizontal_panes_share_remaining_width() {
+        let layout = TileLayout::from_saved(
+            Node::Split {
+                direction: Direction::Horizontal,
+                ratio: 0.5,
+                first: Box::new(Node::Pane(pane(1))),
+                second: Box::new(Node::Pane(pane(2))),
+            },
+            pane(1),
+        );
+        let caps = HashMap::from([(pane(1), 30)]);
+
+        assert_eq!(
+            capped_pane_rects(&layout, &caps),
+            vec![
+                (pane(1), Rect::new(0, 0, 30, 40)),
+                (pane(2), Rect::new(30, 0, 70, 40)),
+            ]
+        );
+    }
+
+    #[test]
+    fn ratio_under_cap_still_wins_for_mixed_horizontal_split() {
+        let layout = TileLayout::from_saved(
+            Node::Split {
+                direction: Direction::Horizontal,
+                ratio: 0.2,
+                first: Box::new(Node::Pane(pane(1))),
+                second: Box::new(Node::Pane(pane(2))),
+            },
+            pane(1),
+        );
+        let caps = HashMap::from([(pane(1), 30)]);
+
+        assert_eq!(
+            capped_pane_rects(&layout, &caps),
+            vec![
+                (pane(1), Rect::new(0, 0, 20, 40)),
+                (pane(2), Rect::new(20, 0, 80, 40)),
+            ]
+        );
+    }
+
+    #[test]
+    fn capped_child_in_vertical_split_centers_within_full_width() {
+        let layout = TileLayout::from_saved(
+            Node::Split {
+                direction: Direction::Vertical,
+                ratio: 0.5,
+                first: Box::new(Node::Pane(pane(1))),
+                second: Box::new(Node::Pane(pane(2))),
+            },
+            pane(1),
+        );
+        let caps = HashMap::from([(pane(2), 30)]);
+
+        assert_eq!(
+            capped_pane_rects(&layout, &caps),
+            vec![
+                (pane(1), Rect::new(0, 0, 100, 20)),
+                (pane(2), Rect::new(35, 20, 30, 20)),
+            ]
+        );
+    }
+
+    #[test]
+    fn cap_larger_than_area_keeps_uncapped_geometry() {
+        let layout = TileLayout::from_saved(Node::Pane(pane(1)), pane(1));
+        let caps = HashMap::from([(pane(1), 120)]);
+
+        assert_eq!(
+            layout.panes_capped(Rect::new(0, 0, 100, 40), &caps)[0].rect,
+            Rect::new(0, 0, 100, 40)
+        );
+    }
+
+    #[test]
+    fn empty_caps_match_existing_layout_geometry() {
+        let layout = sample_layout();
+        let caps = HashMap::new();
+
+        assert_eq!(capped_pane_rects(&layout, &caps), pane_rects(&layout));
     }
 }

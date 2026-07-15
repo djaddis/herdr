@@ -306,6 +306,10 @@ impl App {
                 self.zoom_focused_pane_via_api();
                 leave_navigate_mode(&mut self.state);
             }
+            NavigateAction::ToggleReadableWidth => {
+                self.readable_width_focused_pane_via_api();
+                leave_navigate_mode(&mut self.state);
+            }
             NavigateAction::EnterResizeMode => self.state.mode = Mode::Resize,
             NavigateAction::ToggleSidebar => {
                 self.state.sidebar_collapsed = !self.state.sidebar_collapsed;
@@ -508,6 +512,16 @@ impl App {
             crate::api::schema::PaneZoomParams {
                 pane_id: None,
                 mode: crate::api::schema::PaneZoomMode::Toggle,
+            },
+        );
+    }
+
+    pub(crate) fn readable_width_focused_pane_via_api(&mut self) {
+        self.runtime_pane_readable_width(
+            "tui.pane.readable_width",
+            crate::api::schema::PaneReadableWidthParams {
+                pane_id: None,
+                mode: crate::api::schema::PaneReadableWidthMode::Toggle,
             },
         );
     }
@@ -1238,6 +1252,7 @@ pub(crate) enum NavigateAction {
     EditScrollback,
     CopyMode,
     Zoom,
+    ToggleReadableWidth,
     EnterResizeMode,
     ToggleSidebar,
     CyclePaneNext,
@@ -1345,6 +1360,7 @@ fn action_for_key(
         (&kb.split_horizontal, NavigateAction::SplitHorizontal),
         (&kb.close_pane, NavigateAction::ClosePane),
         (&kb.zoom, NavigateAction::Zoom),
+        (&kb.readable_width, NavigateAction::ToggleReadableWidth),
         (&kb.resize_mode, NavigateAction::EnterResizeMode),
         (&kb.toggle_sidebar, NavigateAction::ToggleSidebar),
         (&kb.reload_config, NavigateAction::ReloadConfig),
@@ -1549,6 +1565,10 @@ pub(super) fn execute_navigate_action_in_context(
         NavigateAction::CopyMode => state.enter_copy_mode(terminal_runtimes),
         NavigateAction::Zoom => {
             state.toggle_zoom();
+            leave_navigate_mode(state);
+        }
+        NavigateAction::ToggleReadableWidth => {
+            state.toggle_readable_width();
             leave_navigate_mode(state);
         }
         NavigateAction::EnterResizeMode => state.mode = Mode::Resize,

@@ -84,7 +84,7 @@ pub(crate) use self::{
         mobile_switcher_areas, mobile_switcher_max_scroll, mobile_switcher_target_at,
         mobile_switcher_workspace_doc_range, MobileSwitcherTarget,
     },
-    panes::{apply_pane_chrome, pane_inner_rect, pane_is_scrolled_back},
+    panes::{apply_pane_chrome, pane_inner_rect, pane_is_scrolled_back, readable_width_caps},
     tabs::compute_tab_bar_view,
     widgets::{centered_popup_rect, modal_stack_areas},
 };
@@ -272,7 +272,8 @@ fn compute_view_internal(
             if ws.zoomed {
                 Vec::new()
             } else {
-                ws.layout.splits(terminal_area)
+                ws.layout
+                    .splits_capped(terminal_area, &readable_width_caps(app, ws))
             }
         })
         .unwrap_or_default();

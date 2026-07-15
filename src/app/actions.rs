@@ -1546,6 +1546,19 @@ pub(crate) struct PaneZoomOutcome {
     pub zoomed: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PaneReadableWidthCommand {
+    Toggle,
+    On,
+    Off,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PaneReadableWidthOutcome {
+    pub changed: bool,
+    pub enabled: bool,
+}
+
 impl AppState {
     #[cfg(test)]
     pub fn navigate_pane(&mut self, direction: NavDirection) {
@@ -1723,6 +1736,40 @@ impl AppState {
         })
     }
 
+    pub(crate) fn apply_pane_readable_width(
+        &mut self,
+        ws_idx: usize,
+        pane_id: PaneId,
+        command: PaneReadableWidthCommand,
+    ) -> Option<PaneReadableWidthOutcome> {
+        let pane = self
+            .workspaces
+            .get_mut(ws_idx)?
+            .tabs
+            .iter_mut()
+            .find_map(|tab| tab.panes.get_mut(&pane_id))?;
+        let desired = match command {
+            PaneReadableWidthCommand::Toggle => !pane.readable_width,
+            PaneReadableWidthCommand::On => true,
+            PaneReadableWidthCommand::Off => false,
+        };
+        if pane.readable_width == desired {
+            return Some(PaneReadableWidthOutcome {
+                changed: false,
+                enabled: pane.readable_width,
+            });
+        }
+
+        pane.readable_width = desired;
+        pane.readable_width_auto = false;
+        let enabled = pane.readable_width;
+        self.mark_session_dirty();
+        Some(PaneReadableWidthOutcome {
+            changed: true,
+            enabled,
+        })
+    }
+
     #[cfg(test)]
     pub fn toggle_zoom(&mut self) {
         let Some(ws_idx) = self.active else {
@@ -1736,6 +1783,21 @@ impl AppState {
             return;
         };
         self.apply_pane_zoom(ws_idx, pane_id, PaneZoomCommand::Toggle);
+    }
+
+    #[cfg(test)]
+    pub fn toggle_readable_width(&mut self) {
+        let Some(ws_idx) = self.active else {
+            return;
+        };
+        let Some(pane_id) = self
+            .workspaces
+            .get(ws_idx)
+            .and_then(crate::workspace::Workspace::focused_pane_id)
+        else {
+            return;
+        };
+        self.apply_pane_readable_width(ws_idx, pane_id, PaneReadableWidthCommand::Toggle);
     }
 
     pub(crate) fn workspace_close_would_close_worktree_group(&self, ws_idx: usize) -> bool {
@@ -2618,6 +2680,32 @@ impl AppState {
             seen,
             presentation: change.presentation.clone(),
         };
+        if self.readable_width_agents {
+            let mut readable_width_changed = false;
+            if let Some(pane) = self.workspaces[ws_idx]
+                .tabs
+                .iter_mut()
+                .find_map(|tab| tab.panes.get_mut(&pane_id))
+            {
+                if update.previous_known_agent.is_none() && update.known_agent.is_some() {
+                    if !pane.readable_width {
+                        pane.readable_width = true;
+                        pane.readable_width_auto = true;
+                        readable_width_changed = true;
+                    }
+                } else if update.previous_known_agent.is_some()
+                    && update.known_agent.is_none()
+                    && pane.readable_width_auto
+                {
+                    pane.readable_width = false;
+                    pane.readable_width_auto = false;
+                    readable_width_changed = true;
+                }
+            }
+            if readable_width_changed {
+                self.mark_session_dirty();
+            }
+        }
         Some(update)
     }
 
@@ -4127,6 +4215,74 @@ mod tests {
         let terminal = state.terminals.get(&terminal_id).unwrap();
         assert_eq!(terminal.state, AgentState::Working);
         assert_eq!(terminal.detected_agent, Some(Agent::Pi));
+    }
+
+    #[test]
+    fn detected_agent_auto_enables_and_reverts_readable_width() {
+        let mut state = app_with_workspaces(&["test"]);
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+
+        state.handle_app_event(AppEvent::StateChanged {
+            pane_id,
+            agent: Some(Agent::Pi),
+            state: AgentState::Working,
+            visible_blocker: false,
+            visible_working: false,
+            process_exited: false,
+            observed_at: std::time::Instant::now(),
+        });
+
+        let pane = state.workspaces[0].panes.get(&pane_id).unwrap();
+        assert!(pane.readable_width);
+        assert!(pane.readable_width_auto);
+
+        state.handle_app_event(AppEvent::StateChanged {
+            pane_id,
+            agent: None,
+            state: AgentState::Idle,
+            visible_blocker: false,
+            visible_working: false,
+            process_exited: true,
+            observed_at: std::time::Instant::now(),
+        });
+
+        let pane = state.workspaces[0].panes.get(&pane_id).unwrap();
+        assert!(!pane.readable_width);
+        assert!(!pane.readable_width_auto);
+    }
+
+    #[test]
+    fn manual_readable_width_survives_agent_exit() {
+        let mut state = app_with_workspaces(&["test"]);
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+        state.workspaces[0]
+            .panes
+            .get_mut(&pane_id)
+            .unwrap()
+            .readable_width = true;
+
+        state.handle_app_event(AppEvent::StateChanged {
+            pane_id,
+            agent: Some(Agent::Pi),
+            state: AgentState::Working,
+            visible_blocker: false,
+            visible_working: false,
+            process_exited: false,
+            observed_at: std::time::Instant::now(),
+        });
+        state.handle_app_event(AppEvent::StateChanged {
+            pane_id,
+            agent: None,
+            state: AgentState::Idle,
+            visible_blocker: false,
+            visible_working: false,
+            process_exited: true,
+            observed_at: std::time::Instant::now(),
+        });
+
+        let pane = state.workspaces[0].panes.get(&pane_id).unwrap();
+        assert!(pane.readable_width);
+        assert!(!pane.readable_width_auto);
     }
 
     #[test]

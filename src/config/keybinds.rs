@@ -333,6 +333,7 @@ pub struct Keybinds {
     pub split_horizontal: ActionKeybinds,
     pub close_pane: ActionKeybinds,
     pub zoom: ActionKeybinds,
+    pub readable_width: ActionKeybinds,
     pub resize_mode: ActionKeybinds,
     pub toggle_sidebar: ActionKeybinds,
     pub custom_commands: Vec<CustomCommandKeybind>,
@@ -495,6 +496,7 @@ impl Config {
             split_horizontal: empty_action!(),
             close_pane: empty_action!(),
             zoom: empty_action!(),
+            readable_width: empty_action!(),
             resize_mode: empty_action!(),
             toggle_sidebar: empty_action!(),
             custom_commands: Vec::new(),
@@ -636,6 +638,7 @@ impl Config {
             apply_action!(keybinds.split_horizontal, split_horizontal, source);
             apply_action!(keybinds.close_pane, close_pane, source);
             apply_action!(keybinds.zoom, zoom, source);
+            apply_action!(keybinds.readable_width, readable_width, source);
             apply_action!(keybinds.resize_mode, resize_mode, source);
             apply_action!(keybinds.toggle_sidebar, toggle_sidebar, source);
 

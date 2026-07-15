@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -13,12 +15,25 @@ use super::text::truncate_end;
 use super::widgets::panel_contrast_fg;
 use crate::app::state::Palette;
 use crate::app::{AppState, Mode};
-use crate::layout::PaneInfo;
+use crate::layout::{PaneId, PaneInfo};
 use crate::terminal::{TerminalRuntime, TerminalRuntimeRegistry};
 
 pub(crate) fn pane_is_scrolled_back(rt: &TerminalRuntime) -> bool {
     rt.scroll_metrics()
         .is_some_and(|metrics| metrics.offset_from_bottom > 0)
+}
+
+pub(crate) fn readable_width_caps(
+    app: &AppState,
+    tab: &crate::workspace::Tab,
+) -> HashMap<PaneId, u16> {
+    let cols = app.readable_width_columns.max(20);
+    let overhead = 2 + u16::from(app.show_scrollbars);
+    tab.panes
+        .iter()
+        .filter(|(_, pane)| pane.readable_width)
+        .map(|(id, _)| (*id, cols.saturating_add(overhead)))
+        .collect()
 }
 
 fn pane_border_title(label: &str, pane_width: u16, _focused: bool) -> Option<String> {
@@ -154,11 +169,13 @@ pub(super) fn resize_tab_panes(
     area: Rect,
     cell_size: crate::kitty_graphics::HostCellSize,
 ) {
+    let caps = readable_width_caps(app, tab);
     if tab.zoomed {
         let focused_id = tab.layout.focused();
         if let Some((terminal_id, rt)) = runtime_for_tab_pane(terminal_runtimes, tab, focused_id) {
             let borders = Borders::ALL;
-            let pane_inner = pane_inner_rect(area, borders);
+            let pane_rect = crate::layout::shrink_to_desired(area, caps.get(&focused_id).copied());
+            let pane_inner = pane_inner_rect(pane_rect, borders);
             let inner_rect = terminal_inner_rect(pane_inner, app.show_scrollbars);
             if !app.direct_attach_resize_locks.contains(terminal_id) {
                 rt.resize(
@@ -172,7 +189,7 @@ pub(super) fn resize_tab_panes(
         return;
     }
 
-    for info in apply_pane_chrome(tab.layout.panes(area), app.pane_gaps) {
+    for info in apply_pane_chrome(tab.layout.panes_capped(area, &caps), app.pane_gaps) {
         let pane_inner = pane_inner_rect(info.rect, info.borders);
 
         if let Some((terminal_id, rt)) = runtime_for_tab_pane(terminal_runtimes, tab, info.id) {
@@ -204,10 +221,12 @@ pub(super) fn compute_pane_infos(
         return Vec::new();
     };
 
+    let caps = readable_width_caps(app, ws);
     if ws.zoomed {
         let focused_id = ws.layout.focused();
         let borders = Borders::ALL;
-        let pane_inner = pane_inner_rect(area, borders);
+        let pane_rect = crate::layout::shrink_to_desired(area, caps.get(&focused_id).copied());
+        let pane_inner = pane_inner_rect(pane_rect, borders);
         let mut inner_rect = pane_inner;
         let mut scrollbar_rect = None;
         if let Some(rt) = app.runtime_for_pane_in_workspace(terminal_runtimes, ws_idx, focused_id) {
@@ -228,7 +247,7 @@ pub(super) fn compute_pane_infos(
         }
         return vec![PaneInfo {
             id: focused_id,
-            rect: area,
+            rect: pane_rect,
             inner_rect,
             scrollbar_rect,
             borders,
@@ -236,7 +255,7 @@ pub(super) fn compute_pane_infos(
         }];
     }
 
-    let mut pane_infos = apply_pane_chrome(ws.layout.panes(area), app.pane_gaps);
+    let mut pane_infos = apply_pane_chrome(ws.layout.panes_capped(area, &caps), app.pane_gaps);
 
     for info in &mut pane_infos {
         let pane_inner = pane_inner_rect(info.rect, info.borders);
@@ -1117,6 +1136,36 @@ mod tests {
         assert_eq!(info.rect, area);
         assert_eq!(info.scrollbar_rect, None);
         assert_eq!(info.inner_rect, Rect::new(10, 3, 39, 8));
+    }
+
+    #[tokio::test]
+    async fn readable_width_single_pane_centers_border_and_caps_inner_width() {
+        let mut app = AppState::test_new();
+        app.show_scrollbars = false;
+        app.readable_width_columns = 40;
+        let mut workspace = Workspace::test_new("test");
+        let root_pane = workspace.tabs[0].root_pane;
+        workspace.tabs[0]
+            .panes
+            .get_mut(&root_pane)
+            .unwrap()
+            .readable_width = true;
+        app.workspaces = vec![workspace];
+        app.active = Some(0);
+
+        let terminal_runtimes = TerminalRuntimeRegistry::new();
+        let infos = compute_pane_infos(
+            &app,
+            &terminal_runtimes,
+            Rect::new(0, 0, 100, 20),
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+        let info = &infos[0];
+
+        assert_eq!(info.rect, Rect::new(29, 0, 42, 20));
+        assert_eq!(info.borders, Borders::ALL);
+        assert_eq!(info.inner_rect, Rect::new(30, 1, 40, 18));
     }
 
     #[tokio::test]

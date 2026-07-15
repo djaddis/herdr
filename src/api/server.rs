@@ -345,6 +345,7 @@ fn api_method_name(method: &Method) -> &'static str {
         Method::PaneSwap(_) => "pane.swap",
         Method::PaneMove(_) => "pane.move",
         Method::PaneZoom(_) => "pane.zoom",
+        Method::PaneReadableWidth(_) => "pane.readable_width",
         Method::PaneLayout(_) => "pane.layout",
         Method::PaneProcessInfo(_) => "pane.process_info",
         Method::LayoutExport(_) => "layout.export",

@@ -7,13 +7,14 @@ use crate::api::schema::{
     PaneLayoutRect, PaneLayoutSnapshot, PaneLayoutSplit, PaneListParams, PaneMoveDestination,
     PaneMoveParams, PaneMoveReason, PaneMoveResult, PaneNeighborParams, PaneNeighborResult,
     PaneProcessInfo, PaneProcessInfoParams, PaneProcessInfoProcess, PaneReadParams, PaneReadResult,
+    PaneReadableWidthMode, PaneReadableWidthParams, PaneReadableWidthResult,
     PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
     PaneReportMetadataParams, PaneResizeParams, PaneResizeReason, PaneResizeResult,
     PaneSendInputParams, PaneSendKeysParams, PaneSendTextParams, PaneSplitParams, PaneSwapParams,
     PaneSwapReason, PaneSwapResult, PaneTarget, PaneZoomMode, PaneZoomParams, PaneZoomReason,
     PaneZoomResult, ReadFormat, ReadSource, ResponseResult,
 };
-use crate::app::actions::{PaneZoomCommand, PaneZoomNoopReason};
+use crate::app::actions::{PaneReadableWidthCommand, PaneZoomCommand, PaneZoomNoopReason};
 use crate::app::{App, Mode};
 use crate::layout::{find_in_direction, NavDirection, PaneId};
 
@@ -293,9 +294,10 @@ impl App {
             return encode_error(id, "pane_layout_unavailable", "pane layout unavailable");
         };
         let area = self.state.view.terminal_area;
+        let caps = crate::ui::readable_width_caps(&self.state, tab);
         let Some(info) = tab
             .layout
-            .panes(area)
+            .panes_capped(area, &caps)
             .into_iter()
             .find(|info| info.id == pane_id)
         else {
@@ -1134,6 +1136,44 @@ impl App {
         )
     }
 
+    pub(super) fn handle_pane_readable_width(
+        &mut self,
+        id: String,
+        params: PaneReadableWidthParams,
+    ) -> String {
+        let Some((ws_idx, pane_id)) = self.resolve_optional_pane(params.pane_id.as_deref()) else {
+            return encode_error(id, "pane_not_found", "pane not found");
+        };
+        let Some(pane_public_id) = self.public_pane_id(ws_idx, pane_id) else {
+            return encode_error(id, "pane_not_found", "pane not found");
+        };
+        let command = match params.mode {
+            PaneReadableWidthMode::Toggle => PaneReadableWidthCommand::Toggle,
+            PaneReadableWidthMode::On => PaneReadableWidthCommand::On,
+            PaneReadableWidthMode::Off => PaneReadableWidthCommand::Off,
+        };
+        let Some(outcome) = self
+            .state
+            .apply_pane_readable_width(ws_idx, pane_id, command)
+        else {
+            return pane_not_found(id, &pane_public_id);
+        };
+        if outcome.changed {
+            self.schedule_session_save();
+        }
+
+        encode_success(
+            id,
+            ResponseResult::PaneReadableWidth {
+                readable_width: PaneReadableWidthResult {
+                    changed: outcome.changed,
+                    enabled: outcome.enabled,
+                    pane_id: pane_public_id,
+                },
+            },
+        )
+    }
+
     pub(super) fn handle_pane_rename(&mut self, id: String, params: PaneRenameParams) -> String {
         let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
@@ -1640,7 +1680,10 @@ impl App {
         direction: PaneDirection,
     ) -> Option<PaneId> {
         let tab = self.state.workspaces.get(ws_idx)?.tabs.get(tab_idx)?;
-        let panes = tab.layout.panes(self.state.view.terminal_area);
+        let caps = crate::ui::readable_width_caps(&self.state, tab);
+        let panes = tab
+            .layout
+            .panes_capped(self.state.view.terminal_area, &caps);
         let source = panes.iter().find(|pane| pane.id == source_pane_id)?;
         find_in_direction(source, direction.into(), &panes)
     }
@@ -1654,16 +1697,20 @@ impl App {
         let tab = ws.tabs.get(tab_idx)?;
         let area = self.state.view.terminal_area;
         let focused_pane_id = self.public_pane_id(ws_idx, tab.layout.focused())?;
-        let panes = crate::ui::apply_pane_chrome(tab.layout.panes(area), self.state.pane_gaps)
-            .into_iter()
-            .filter_map(|pane| {
-                Some(PaneLayoutPane {
-                    pane_id: self.public_pane_id(ws_idx, pane.id)?,
-                    focused: pane.is_focused,
-                    rect: pane.rect.into(),
-                })
+        let caps = crate::ui::readable_width_caps(&self.state, tab);
+        let panes = crate::ui::apply_pane_chrome(
+            tab.layout.panes_capped(area, &caps),
+            self.state.pane_gaps,
+        )
+        .into_iter()
+        .filter_map(|pane| {
+            Some(PaneLayoutPane {
+                pane_id: self.public_pane_id(ws_idx, pane.id)?,
+                focused: pane.is_focused,
+                rect: pane.rect.into(),
             })
-            .collect();
+        })
+        .collect();
         let splits = tab
             .layout
             .splits(area)

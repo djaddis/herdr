@@ -603,6 +603,8 @@ impl App {
             confirm_close: config.ui.confirm_close,
             prompt_new_tab_name: config.ui.prompt_new_tab_name,
             pane_gaps: config.ui.pane_gaps,
+            readable_width_columns: config.ui.readable_width_columns,
+            readable_width_agents: config.ui.readable_width_agents,
             thick_pane_borders: config.ui.pane_border_weight.is_thick(),
             show_agent_labels_on_pane_borders: config.ui.show_agent_labels_on_pane_borders,
             hide_tab_bar_when_single_tab: config.ui.hide_tab_bar_when_single_tab,
@@ -1367,6 +1369,8 @@ impl App {
                 self.state.confirm_close = config.ui.confirm_close;
                 self.state.prompt_new_tab_name = config.ui.prompt_new_tab_name;
                 self.state.pane_gaps = config.ui.pane_gaps;
+                self.state.readable_width_columns = config.ui.readable_width_columns;
+                self.state.readable_width_agents = config.ui.readable_width_agents;
                 self.state.thick_pane_borders = config.ui.pane_border_weight.is_thick();
                 self.state.show_agent_labels_on_pane_borders =
                     config.ui.show_agent_labels_on_pane_borders;

@@ -426,6 +426,8 @@ pub struct KeysConfig {
     /// Toggle zoom for the focused pane. Default: "prefix+z"
     #[serde(alias = "fullscreen")]
     pub zoom: BindingConfig,
+    /// Toggle readable-width mode for the focused pane. Default: "prefix+f"
+    pub readable_width: BindingConfig,
     /// Enter resize mode. Default: "prefix+r"
     pub resize_mode: BindingConfig,
     /// Toggle sidebar collapse. Default: "prefix+b"
@@ -545,6 +547,8 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(alias = "fullscreen", skip_serializing_if = "Option::is_none")]
     zoom: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    readable_width: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     resize_mode: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     toggle_sidebar: Option<BindingConfig>,
@@ -622,6 +626,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(split_horizontal);
         apply_field!(close_pane);
         apply_field!(zoom);
+        apply_field!(readable_width);
         apply_field!(resize_mode);
         apply_field!(toggle_sidebar);
         apply_field!(indexed);
@@ -720,6 +725,7 @@ impl KeysConfig {
         copy_effective_action_field!(split_horizontal, keybinds.split_horizontal);
         copy_effective_action_field!(close_pane, keybinds.close_pane);
         copy_effective_action_field!(zoom, keybinds.zoom);
+        copy_effective_action_field!(readable_width, keybinds.readable_width);
         copy_effective_action_field!(resize_mode, keybinds.resize_mode);
         copy_effective_action_field!(toggle_sidebar, keybinds.toggle_sidebar);
         copy_user_field!(indexed);
@@ -816,6 +822,10 @@ pub struct UiConfig {
     pub prompt_new_tab_name: bool,
     /// Keep split panes visually separated instead of sharing divider borders. Default: true.
     pub pane_gaps: bool,
+    /// Terminal content width (columns) for panes in readable-width mode. Default: 120.
+    pub readable_width_columns: u16,
+    /// Auto-enable readable-width mode when an agent TUI is detected in a pane. Default: true.
+    pub readable_width_agents: bool,
     /// Line weight for split pane borders. Saved values are "standard" or "thick". Default: "standard".
     pub pane_border_weight: PaneBorderWeightConfig,
     /// Show agent labels in split pane borders when no manual pane label is set. Default: false.
@@ -979,6 +989,7 @@ impl Default for KeysConfig {
             split_horizontal: BindingConfig::one("prefix+minus"),
             close_pane: BindingConfig::one("prefix+x"),
             zoom: BindingConfig::one("prefix+z"),
+            readable_width: BindingConfig::one("prefix+f"),
             resize_mode: BindingConfig::one("prefix+r"),
             toggle_sidebar: BindingConfig::one("prefix+b"),
             indexed: IndexedKeysConfig::default(),
@@ -1013,6 +1024,8 @@ impl Default for UiConfig {
             confirm_close: true,
             prompt_new_tab_name: true,
             pane_gaps: true,
+            readable_width_columns: 120,
+            readable_width_agents: true,
             pane_border_weight: PaneBorderWeightConfig::Standard,
             show_agent_labels_on_pane_borders: false,
             hide_tab_bar_when_single_tab: false,
@@ -1225,6 +1238,8 @@ agent_panel_scope = "current"
     fn pane_appearance_defaults_and_parse() {
         let default_config = Config::default();
         assert!(default_config.ui.pane_gaps);
+        assert_eq!(default_config.ui.readable_width_columns, 120);
+        assert!(default_config.ui.readable_width_agents);
         assert!(!default_config.ui.pane_border_weight.is_thick());
         assert!(default_config.ui.show_scrollbars);
         assert!(!default_config.ui.show_agent_labels_on_pane_borders);
@@ -1233,12 +1248,16 @@ agent_panel_scope = "current"
         let toml = r#"
 [ui]
 pane_gaps = true
+readable_width_columns = 100
+readable_width_agents = false
 show_scrollbars = false
 show_agent_labels_on_pane_borders = true
 hide_tab_bar_when_single_tab = true
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.ui.pane_gaps);
+        assert_eq!(config.ui.readable_width_columns, 100);
+        assert!(!config.ui.readable_width_agents);
         assert!(!config.ui.show_scrollbars);
         assert!(config.ui.show_agent_labels_on_pane_borders);
         assert!(config.ui.hide_tab_bar_when_single_tab);

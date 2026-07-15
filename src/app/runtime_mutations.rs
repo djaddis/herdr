@@ -1,9 +1,9 @@
 use crate::api::schema::{
-    EmptyParams, LayoutSetSplitRatioParams, Method, PaneFocusDirectionParams, PaneRenameParams,
-    PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget, PaneZoomParams, TabCreateParams,
-    TabMoveParams, TabRenameParams, TabTarget, WorkspaceCreateParams, WorkspaceMoveParams,
-    WorkspaceRenameParams, WorkspaceTarget, WorktreeCreateParams, WorktreeOpenParams,
-    WorktreeRemoveParams,
+    EmptyParams, LayoutSetSplitRatioParams, Method, PaneFocusDirectionParams,
+    PaneReadableWidthParams, PaneRenameParams, PaneResizeParams, PaneSplitParams, PaneSwapParams,
+    PaneTarget, PaneZoomParams, TabCreateParams, TabMoveParams, TabRenameParams, TabTarget,
+    WorkspaceCreateParams, WorkspaceMoveParams, WorkspaceRenameParams, WorkspaceTarget,
+    WorktreeCreateParams, WorktreeOpenParams, WorktreeRemoveParams,
 };
 
 use super::App;
@@ -139,6 +139,14 @@ impl App {
 
     pub(crate) fn runtime_pane_zoom(&mut self, id: &'static str, params: PaneZoomParams) -> String {
         self.dispatch_runtime_mutation(id, Method::PaneZoom(params))
+    }
+
+    pub(crate) fn runtime_pane_readable_width(
+        &mut self,
+        id: &'static str,
+        params: PaneReadableWidthParams,
+    ) -> String {
+        self.dispatch_runtime_mutation(id, Method::PaneReadableWidth(params))
     }
 
     pub(crate) fn runtime_layout_set_split_ratio(
