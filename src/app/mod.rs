@@ -602,7 +602,6 @@ impl App {
             show_scrollbars: config.ui.show_scrollbars,
             confirm_close: config.ui.confirm_close,
             prompt_new_tab_name: config.ui.prompt_new_tab_name,
-            pane_borders: config.ui.pane_borders,
             pane_gaps: config.ui.pane_gaps,
             thick_pane_borders: config.ui.pane_border_weight.is_thick(),
             show_agent_labels_on_pane_borders: config.ui.show_agent_labels_on_pane_borders,
@@ -1367,7 +1366,6 @@ impl App {
                     config.ui.right_click_passthrough_modifiers();
                 self.state.confirm_close = config.ui.confirm_close;
                 self.state.prompt_new_tab_name = config.ui.prompt_new_tab_name;
-                self.state.pane_borders = config.ui.pane_borders;
                 self.state.pane_gaps = config.ui.pane_gaps;
                 self.state.thick_pane_borders = config.ui.pane_border_weight.is_thick();
                 self.state.show_agent_labels_on_pane_borders =

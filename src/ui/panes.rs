@@ -81,19 +81,7 @@ fn pane_below<'a>(info: &PaneInfo, panes: &'a [PaneInfo]) -> Option<&'a PaneInfo
     })
 }
 
-fn shrink_for_one_cell_gap(size: u16) -> u16 {
-    if size > 1 {
-        size - 1
-    } else {
-        size
-    }
-}
-
-pub(crate) fn apply_pane_chrome(
-    panes: Vec<PaneInfo>,
-    pane_borders: bool,
-    pane_gaps: bool,
-) -> Vec<PaneInfo> {
+pub(crate) fn apply_pane_chrome(panes: Vec<PaneInfo>, pane_gaps: bool) -> Vec<PaneInfo> {
     let multi_pane = panes.len() > 1;
     panes
         .iter()
@@ -102,29 +90,16 @@ pub(crate) fn apply_pane_chrome(
             let right_neighbor = multi_pane.then(|| pane_to_right(&info, &panes)).flatten();
             let below_neighbor = multi_pane.then(|| pane_below(&info, &panes)).flatten();
 
-            if multi_pane && pane_gaps && !pane_borders {
+            let mut borders = Borders::ALL;
+            if !pane_gaps {
                 if right_neighbor.is_some() {
-                    info.rect.width = shrink_for_one_cell_gap(info.rect.width);
+                    borders.remove(Borders::RIGHT);
                 }
                 if below_neighbor.is_some() {
-                    info.rect.height = shrink_for_one_cell_gap(info.rect.height);
+                    borders.remove(Borders::BOTTOM);
                 }
             }
-
-            info.borders = if !multi_pane || !pane_borders {
-                Borders::NONE
-            } else {
-                let mut borders = Borders::ALL;
-                if !pane_gaps {
-                    if right_neighbor.is_some() {
-                        borders.remove(Borders::RIGHT);
-                    }
-                    if below_neighbor.is_some() {
-                        borders.remove(Borders::BOTTOM);
-                    }
-                }
-                borders
-            };
+            info.borders = borders;
             info
         })
         .collect()
@@ -179,16 +154,10 @@ pub(super) fn resize_tab_panes(
     area: Rect,
     cell_size: crate::kitty_graphics::HostCellSize,
 ) {
-    let multi_pane = tab.layout.pane_count() > 1;
-
     if tab.zoomed {
         let focused_id = tab.layout.focused();
         if let Some((terminal_id, rt)) = runtime_for_tab_pane(terminal_runtimes, tab, focused_id) {
-            let borders = if multi_pane && app.pane_borders {
-                Borders::ALL
-            } else {
-                Borders::NONE
-            };
+            let borders = Borders::ALL;
             let pane_inner = pane_inner_rect(area, borders);
             let inner_rect = terminal_inner_rect(pane_inner, app.show_scrollbars);
             if !app.direct_attach_resize_locks.contains(terminal_id) {
@@ -203,7 +172,7 @@ pub(super) fn resize_tab_panes(
         return;
     }
 
-    for info in apply_pane_chrome(tab.layout.panes(area), app.pane_borders, app.pane_gaps) {
+    for info in apply_pane_chrome(tab.layout.panes(area), app.pane_gaps) {
         let pane_inner = pane_inner_rect(info.rect, info.borders);
 
         if let Some((terminal_id, rt)) = runtime_for_tab_pane(terminal_runtimes, tab, info.id) {
@@ -235,15 +204,9 @@ pub(super) fn compute_pane_infos(
         return Vec::new();
     };
 
-    let multi_pane = ws.layout.pane_count() > 1;
-
     if ws.zoomed {
         let focused_id = ws.layout.focused();
-        let borders = if multi_pane && app.pane_borders {
-            Borders::ALL
-        } else {
-            Borders::NONE
-        };
+        let borders = Borders::ALL;
         let pane_inner = pane_inner_rect(area, borders);
         let mut inner_rect = pane_inner;
         let mut scrollbar_rect = None;
@@ -273,7 +236,7 @@ pub(super) fn compute_pane_infos(
         }];
     }
 
-    let mut pane_infos = apply_pane_chrome(ws.layout.panes(area), app.pane_borders, app.pane_gaps);
+    let mut pane_infos = apply_pane_chrome(ws.layout.panes(area), app.pane_gaps);
 
     for info in &mut pane_infos {
         let pane_inner = pane_inner_rect(info.rect, info.borders);
@@ -368,12 +331,11 @@ struct LineCell {
 }
 
 fn render_pane_borders(app: &AppState, ws: &crate::workspace::Workspace, frame: &mut Frame) {
-    if !app.pane_borders
-        || app
-            .view
-            .pane_infos
-            .iter()
-            .all(|info| info.borders.is_empty())
+    if app
+        .view
+        .pane_infos
+        .iter()
+        .all(|info| info.borders.is_empty())
     {
         return;
     }
@@ -891,7 +853,6 @@ mod tests {
 
         let infos = apply_pane_chrome(
             workspace.tabs[0].layout.panes(Rect::new(0, 0, 100, 20)),
-            true,
             false,
         );
         let left = infos.iter().find(|info| info.id == root).unwrap();
@@ -911,7 +872,6 @@ mod tests {
 
         let infos = apply_pane_chrome(
             workspace.tabs[0].layout.panes(Rect::new(0, 0, 100, 20)),
-            true,
             false,
         );
         let top = infos.iter().find(|info| info.id == root).unwrap();
@@ -932,7 +892,6 @@ mod tests {
         let infos = apply_pane_chrome(
             workspace.tabs[0].layout.panes(Rect::new(0, 0, 100, 20)),
             true,
-            true,
         );
         let left = infos.iter().find(|info| info.id == root).unwrap();
         let right = infos.iter().find(|info| info.id == right).unwrap();
@@ -940,44 +899,6 @@ mod tests {
         assert_eq!(left.rect.x + left.rect.width, right.rect.x);
         assert_eq!(left.borders, Borders::ALL);
         assert_eq!(right.borders, Borders::ALL);
-    }
-
-    #[test]
-    fn borderless_pane_gaps_add_one_empty_cell_between_panes() {
-        let mut workspace = Workspace::test_new("test");
-        let root = workspace.tabs[0].root_pane;
-        let right = workspace.test_split(ratatui::layout::Direction::Horizontal);
-        workspace.tabs[0].layout.focus_pane(root);
-
-        let infos = apply_pane_chrome(
-            workspace.tabs[0].layout.panes(Rect::new(0, 0, 100, 20)),
-            false,
-            true,
-        );
-        let left = infos.iter().find(|info| info.id == root).unwrap();
-        let right = infos.iter().find(|info| info.id == right).unwrap();
-
-        assert_eq!(left.rect, Rect::new(0, 0, 49, 20));
-        assert_eq!(right.rect, Rect::new(50, 0, 50, 20));
-        assert!(left.borders.is_empty());
-        assert!(right.borders.is_empty());
-    }
-
-    #[test]
-    fn disabled_pane_borders_make_inner_rect_equal_visual_rect() {
-        let mut workspace = Workspace::test_new("test");
-        workspace.test_split(ratatui::layout::Direction::Horizontal);
-
-        let infos = apply_pane_chrome(
-            workspace.tabs[0].layout.panes(Rect::new(0, 0, 100, 20)),
-            false,
-            false,
-        );
-
-        for info in infos {
-            assert!(info.borders.is_empty());
-            assert_eq!(pane_inner_rect(info.rect, info.borders), info.rect);
-        }
     }
 
     #[test]

@@ -290,8 +290,6 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Set false to create tabs immediately with generated names.
 # prompt_new_tab_name = true
 
-# Draw borders around split panes.
-# pane_borders = true
 
 # Keep split panes visually separated instead of sharing divider borders.
 # pane_gaps = true

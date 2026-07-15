@@ -1352,39 +1352,24 @@ impl AppState {
 
     pub(super) fn find_border_at(&self, col: u16, row: u16) -> Option<&SplitBorder> {
         self.view.split_borders.iter().find(|b| match b.direction {
-            Direction::Horizontal if self.pane_borders && !self.pane_gaps => {
+            Direction::Horizontal if !self.pane_gaps => {
                 col == b.pos && row >= b.area.y && row < b.area.y + b.area.height
             }
-            Direction::Horizontal if self.pane_borders && self.pane_gaps => {
+            Direction::Horizontal => {
                 row >= b.area.y
                     && row < b.area.y + b.area.height
                     && col >= b.pos.saturating_sub(1)
                     && col <= b.pos
             }
-            Direction::Horizontal if !self.pane_borders && self.pane_gaps => {
-                row >= b.area.y
-                    && row < b.area.y + b.area.height
-                    && b.pos.checked_sub(1).is_some_and(|gap_col| {
-                        col == gap_col && self.pane_frame_at(col, row).is_none()
-                    })
-            }
-            Direction::Vertical if self.pane_borders && !self.pane_gaps => {
+            Direction::Vertical if !self.pane_gaps => {
                 row == b.pos && col >= b.area.x && col < b.area.x + b.area.width
             }
-            Direction::Vertical if self.pane_borders && self.pane_gaps => {
+            Direction::Vertical => {
                 col >= b.area.x
                     && col < b.area.x + b.area.width
                     && row >= b.pos.saturating_sub(1)
                     && row <= b.pos
             }
-            Direction::Vertical if !self.pane_borders && self.pane_gaps => {
-                col >= b.area.x
-                    && col < b.area.x + b.area.width
-                    && b.pos.checked_sub(1).is_some_and(|gap_row| {
-                        row == gap_row && self.pane_frame_at(col, row).is_none()
-                    })
-            }
-            _ => false,
         })
     }
 
@@ -2832,21 +2817,6 @@ mod tests {
     }
 
     #[test]
-    fn borderless_no_gap_split_has_no_mouse_hitbox_over_content() {
-        let mut app = app_for_mouse_test();
-        app.state.workspaces = vec![Workspace::test_new("test")];
-        app.state.active = Some(0);
-        app.state.selected = 0;
-        app.state.pane_borders = false;
-        app.state.workspaces[0].test_split(Direction::Horizontal);
-        crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 106, 20));
-        let border = app.state.view.split_borders[0].clone();
-        let row = border.area.y.saturating_add(1);
-
-        assert!(app.state.find_border_at(border.pos, row).is_none());
-    }
-
-    #[test]
     fn bordered_pane_gaps_keep_both_split_borders_draggable() {
         let mut app = app_for_mouse_test();
         app.state.workspaces = vec![Workspace::test_new("test")];
@@ -2867,63 +2837,6 @@ mod tests {
             .state
             .find_border_at(border.pos.saturating_add(1), row)
             .is_none());
-    }
-
-    #[test]
-    fn borderless_pane_gap_is_not_a_pane_but_remains_split_draggable() {
-        let mut app = app_for_mouse_test();
-        app.state.workspaces = vec![Workspace::test_new("test")];
-        app.state.active = Some(0);
-        app.state.selected = 0;
-        app.state.pane_borders = false;
-        app.state.pane_gaps = true;
-        app.state.workspaces[0].test_split(Direction::Horizontal);
-        crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 106, 20));
-        let border = app.state.view.split_borders[0].clone();
-        let row = border.area.y.saturating_add(1);
-        let gap_col = border.pos.saturating_sub(1);
-
-        assert!(app.state.pane_at(gap_col, row).is_none());
-        assert!(app.state.find_border_at(gap_col, row).is_some());
-        assert!(app.state.find_border_at(border.pos, row).is_none());
-    }
-
-    #[test]
-    fn borderless_gap_hitbox_is_empty_when_first_split_side_has_one_cell() {
-        let mut app = app_for_mouse_test();
-        app.state.workspaces = vec![Workspace::test_new("test")];
-        app.state.active = Some(0);
-        app.state.selected = 0;
-        app.state.pane_borders = false;
-        app.state.pane_gaps = true;
-        app.state.workspaces[0].test_split(Direction::Horizontal);
-        crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 2, 4));
-        let border = app.state.view.split_borders[0].clone();
-        let row = border.area.y.saturating_add(1);
-        let candidate_gap_col = border.pos.saturating_sub(1);
-
-        assert!(app.state.pane_frame_at(candidate_gap_col, row).is_some());
-        assert!(app.state.find_border_at(candidate_gap_col, row).is_none());
-    }
-
-    #[test]
-    fn borderless_gap_hitbox_is_empty_when_first_split_side_has_zero_width() {
-        let mut app = app_for_mouse_test();
-        app.state.workspaces = vec![Workspace::test_new("test")];
-        app.state.active = Some(0);
-        app.state.selected = 0;
-        app.state.pane_borders = false;
-        app.state.pane_gaps = true;
-        app.state.workspaces[0].test_split(Direction::Horizontal);
-        app.state.workspaces[0].tabs[0]
-            .layout
-            .set_ratio_at(&[], 0.1);
-        crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 1, 4));
-        let border = app.state.view.split_borders[0].clone();
-        let row = border.area.y.saturating_add(1);
-
-        assert_eq!(border.pos, 0);
-        assert!(app.state.find_border_at(0, row).is_none());
     }
 
     #[test]

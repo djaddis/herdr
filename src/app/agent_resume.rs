@@ -128,7 +128,6 @@ impl App {
         let mut pane_infos = derived_pending_agent_resume_pane_infos(
             tab,
             terminal_area,
-            self.state.pane_borders,
             self.state.pane_gaps,
             self.state.show_scrollbars,
         );
@@ -288,11 +287,10 @@ impl App {
 fn derived_pending_agent_resume_pane_infos(
     tab: &crate::workspace::Tab,
     terminal_area: Rect,
-    pane_borders: bool,
     pane_gaps: bool,
     show_scrollbars: bool,
 ) -> Vec<crate::layout::PaneInfo> {
-    crate::ui::apply_pane_chrome(tab.layout.panes(terminal_area), pane_borders, pane_gaps)
+    crate::ui::apply_pane_chrome(tab.layout.panes(terminal_area), pane_gaps)
         .into_iter()
         .map(|mut info| {
             let pane_inner = crate::ui::pane_inner_rect(info.rect, info.borders);
