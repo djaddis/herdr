@@ -1707,6 +1707,9 @@ impl PaneRuntime {
         let mut terminal = crate::ghostty::Terminal::new(cols, rows, scrollback_limit_bytes)
             .map_err(|e| std::io::Error::other(e.to_string()))?;
         terminal
+            .resize(cols, rows, cell_width_px, cell_height_px)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        terminal
             .enable_grapheme_cluster_mode()
             .map_err(|e| std::io::Error::other(e.to_string()))?;
         if crate::kitty_graphics::is_enabled() {

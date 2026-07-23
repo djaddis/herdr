@@ -433,8 +433,10 @@ impl CellWide {
 
 type WritePtyCallback = dyn FnMut(&[u8]) + Send;
 
-struct WritePtyCallbackState {
-    callback: Box<WritePtyCallback>,
+#[derive(Default)]
+struct TerminalCallbackState {
+    write_pty: Option<Box<WritePtyCallback>>,
+    size_report: ffi::GhosttySizeReportSize,
 }
 
 unsafe extern "C" fn write_pty_trampoline(
@@ -449,13 +451,32 @@ unsafe extern "C" fn write_pty_trampoline(
     if data.is_null() && len != 0 {
         return;
     }
-    let state = unsafe { &mut *(userdata.cast::<WritePtyCallbackState>()) };
+    let state = unsafe { &mut *(userdata.cast::<TerminalCallbackState>()) };
+    let Some(callback) = state.write_pty.as_mut() else {
+        return;
+    };
     let bytes = if len == 0 {
         &[]
     } else {
         unsafe { slice::from_raw_parts(data, len) }
     };
-    (state.callback)(bytes);
+    callback(bytes);
+}
+
+unsafe extern "C" fn size_trampoline(
+    _terminal: ffi::GhosttyTerminal_ptr,
+    userdata: *mut c_void,
+    out_size: *mut ffi::GhosttySizeReportSize,
+) -> bool {
+    if userdata.is_null() || out_size.is_null() {
+        return false;
+    }
+    let size = unsafe { &*userdata.cast::<TerminalCallbackState>() }.size_report;
+    if size.rows == 0 || size.columns == 0 || size.cell_width == 0 || size.cell_height == 0 {
+        return false;
+    }
+    unsafe { out_size.write(size) };
+    true
 }
 
 fn install_png_decoder_once() {
@@ -573,7 +594,7 @@ pub fn encode_focus(event: FocusEvent) -> Result<Vec<u8>, Error> {
 
 pub struct Terminal {
     raw: ffi::GhosttyTerminal_ptr,
-    write_pty_callback: Option<Box<WritePtyCallbackState>>,
+    callback_state: Box<TerminalCallbackState>,
     kitty_fingerprints: Mutex<HashMap<u32, KittyImageFingerprintEntry>>,
 }
 
@@ -589,11 +610,35 @@ impl Terminal {
         unsafe {
             ffi::ghostty_terminal_new(ptr::null(), &mut raw, options).into_result()?;
         }
-        Ok(Self {
+        let mut terminal = Self {
             raw,
-            write_pty_callback: None,
+            callback_state: Box::new(TerminalCallbackState {
+                size_report: ffi::GhosttySizeReportSize {
+                    rows,
+                    columns: cols,
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
             kitty_fingerprints: Mutex::new(HashMap::new()),
-        })
+        };
+        let userdata = (&mut *terminal.callback_state as *mut TerminalCallbackState).cast::<c_void>();
+        // SAFETY: the boxed callback state outlives the terminal handle; both drop together.
+        unsafe {
+            ffi::ghostty_terminal_set(
+                terminal.raw,
+                ffi::GhosttyTerminalOption_GHOSTTY_TERMINAL_OPT_USERDATA,
+                userdata.cast(),
+            )
+            .into_result()?;
+            ffi::ghostty_terminal_set(
+                terminal.raw,
+                ffi::GhosttyTerminalOption_GHOSTTY_TERMINAL_OPT_SIZE,
+                (size_trampoline as *const ()).cast(),
+            )
+            .into_result()?;
+        }
+        Ok(terminal)
     }
 
     pub fn write(&mut self, bytes: &[u8]) {
@@ -610,13 +655,24 @@ impl Terminal {
         cell_width_px: u32,
         cell_height_px: u32,
     ) -> Result<(), Error> {
-        let cell_width_px = cell_width_px.max(1);
-        let cell_height_px = cell_height_px.max(1);
         // SAFETY: self.raw is valid and sizes are plain values.
         unsafe {
-            ffi::ghostty_terminal_resize(self.raw, cols, rows, cell_width_px, cell_height_px)
-                .into_result()
+            ffi::ghostty_terminal_resize(
+                self.raw,
+                cols,
+                rows,
+                cell_width_px.max(1),
+                cell_height_px.max(1),
+            )
+            .into_result()?;
         }
+        self.callback_state.size_report = ffi::GhosttySizeReportSize {
+            rows,
+            columns: cols,
+            cell_width: cell_width_px,
+            cell_height: cell_height_px,
+        };
+        Ok(())
     }
 
     pub fn enable_kitty_graphics(&mut self) -> Result<(), Error> {
@@ -668,17 +724,9 @@ impl Terminal {
     where
         F: FnMut(&[u8]) + Send + 'static,
     {
-        let mut state = Box::new(WritePtyCallbackState {
-            callback: Box::new(callback),
-        });
-        let userdata = (&mut *state as *mut WritePtyCallbackState).cast::<c_void>();
+        self.callback_state.write_pty = Some(Box::new(callback));
+        // SAFETY: userdata (the callback state) was installed in `new`.
         unsafe {
-            ffi::ghostty_terminal_set(
-                self.raw,
-                ffi::GhosttyTerminalOption_GHOSTTY_TERMINAL_OPT_USERDATA,
-                userdata.cast(),
-            )
-            .into_result()?;
             ffi::ghostty_terminal_set(
                 self.raw,
                 ffi::GhosttyTerminalOption_GHOSTTY_TERMINAL_OPT_WRITE_PTY,
@@ -686,7 +734,6 @@ impl Terminal {
             )
             .into_result()?;
         }
-        self.write_pty_callback = Some(state);
         Ok(())
     }
 
