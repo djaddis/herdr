@@ -351,7 +351,10 @@ fn compute_mobile_view(
             if ws.zoomed {
                 Vec::new()
             } else {
-                ws.layout.splits(terminal_area)
+                ws.layout.splits_capped(
+                    terminal_area,
+                    &readable_width_caps(app, ws, terminal_area.width),
+                )
             }
         })
         .unwrap_or_default();

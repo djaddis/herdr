@@ -1204,8 +1204,8 @@ mod tests {
         assert_eq!(info.rect, Rect::new(35, 0, 30, 20));
         assert_eq!(info.inner_rect, Rect::new(36, 1, 28, 18));
 
-        // On a narrow terminal the column cap wins and the percent cap is
-        // floored so panes never collapse below 20 content columns.
+        // On a narrower terminal the percentage cap falls below the floor, so
+        // panes never collapse below 20 content columns.
         let infos = compute_pane_infos(
             &app,
             &terminal_runtimes,

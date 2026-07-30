@@ -1714,7 +1714,7 @@ impl App {
         .collect();
         let splits = tab
             .layout
-            .splits(area)
+            .splits_capped(area, &caps)
             .into_iter()
             .enumerate()
             .map(|(idx, split)| PaneLayoutSplit {

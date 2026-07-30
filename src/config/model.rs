@@ -826,7 +826,7 @@ pub struct UiConfig {
     pub readable_width_columns: u16,
     /// Auto-enable readable-width mode when an agent TUI is detected in a pane. Default: true.
     pub readable_width_agents: bool,
-    /// Maximum readable-width pane content width as a percentage of the terminal width (10-100). Default: 100 (no percentage cap).
+    /// Maximum readable-width pane outer width as a percentage of the terminal pane area width (10-100). Default: 100 (no percentage cap).
     pub readable_width_max_percent: u16,
     /// Line weight for split pane borders. Saved values are "standard" or "thick". Default: "standard".
     pub pane_border_weight: PaneBorderWeightConfig,
