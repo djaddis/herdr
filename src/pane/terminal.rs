@@ -272,27 +272,23 @@ impl PaneTerminal {
             .kitty_image_placements_with_data_filter(needs_data)
     }
 
-    pub fn apply_host_terminal_theme(
+    pub fn apply_host_terminal_theme<F>(
         &self,
         theme: crate::terminal_theme::TerminalTheme,
         appearance: Option<crate::terminal_theme::HostAppearance>,
-    ) -> Option<Bytes> {
-        match appearance {
-            Some(appearance) => self
-                .ghostty
-                .apply_host_terminal_theme_with_appearance(theme, appearance),
-            None => {
-                self.ghostty.apply_host_terminal_theme(theme);
-                None
-            }
-        }
+        try_send: F,
+    ) where
+        F: FnOnce(Bytes) -> bool,
+    {
+        self.ghostty
+            .apply_host_terminal_theme_and_maybe_notify(theme, appearance, try_send);
     }
 
-    pub fn mark_host_appearance_notified(
+    #[cfg(unix)]
+    pub fn handoff_color_scheme_state(
         &self,
-        appearance: crate::terminal_theme::HostAppearance,
-    ) {
-        self.ghostty.mark_host_appearance_notified(appearance);
+    ) -> (bool, Option<crate::terminal_theme::HostAppearance>) {
+        self.ghostty.handoff_color_scheme_state()
     }
 
     pub fn has_transient_default_color_override(&self) -> bool {
@@ -438,23 +434,20 @@ impl GhosttyPaneTerminal {
     }
 
     pub fn apply_host_terminal_theme(&self, theme: crate::terminal_theme::TerminalTheme) {
-        self.apply_host_terminal_theme_inner(theme, None);
+        self.apply_host_terminal_theme_and_maybe_notify(theme, None, |_| false);
     }
 
-    pub fn apply_host_terminal_theme_with_appearance(
-        &self,
-        theme: crate::terminal_theme::TerminalTheme,
-        appearance: crate::terminal_theme::HostAppearance,
-    ) -> Option<Bytes> {
-        self.apply_host_terminal_theme_inner(theme, Some(appearance))
-    }
-
-    fn apply_host_terminal_theme_inner(
+    pub fn apply_host_terminal_theme_and_maybe_notify<F>(
         &self,
         theme: crate::terminal_theme::TerminalTheme,
         appearance: Option<crate::terminal_theme::HostAppearance>,
-    ) -> Option<Bytes> {
-        let mut core = self.core.lock().ok()?;
+        try_send: F,
+    ) where
+        F: FnOnce(Bytes) -> bool,
+    {
+        let Ok(mut core) = self.core.lock() else {
+            return;
+        };
         let foreground_unowned = !core.child_default_foreground_changed;
         let background_unowned = !core.child_default_background_changed;
         core.host_terminal_theme = theme;
@@ -468,31 +461,58 @@ impl GhosttyPaneTerminal {
             background_unowned,
         );
 
-        let appearance = appearance?;
+        let Some(appearance) = appearance else {
+            return;
+        };
         if core.last_notified_host_appearance == Some(appearance)
             || !core
                 .terminal
                 .color_scheme_reporting_enabled()
                 .unwrap_or(false)
         {
-            return None;
+            return;
         }
-        Some(Bytes::from_static(match appearance {
+        let report = Bytes::from_static(match appearance {
             crate::terminal_theme::HostAppearance::Dark => {
                 crate::terminal_theme::COLOR_SCHEME_DARK_REPORT
             }
             crate::terminal_theme::HostAppearance::Light => {
                 crate::terminal_theme::COLOR_SCHEME_LIGHT_REPORT
             }
-        }))
+        });
+        if try_send(report) {
+            core.last_notified_host_appearance = Some(appearance);
+        }
     }
 
-    pub fn mark_host_appearance_notified(
+    #[cfg(unix)]
+    pub fn handoff_color_scheme_state(
         &self,
-        appearance: crate::terminal_theme::HostAppearance,
+    ) -> (bool, Option<crate::terminal_theme::HostAppearance>) {
+        self.core
+            .lock()
+            .map(|core| {
+                (
+                    core.terminal
+                        .color_scheme_reporting_enabled()
+                        .unwrap_or(false),
+                    core.last_notified_host_appearance,
+                )
+            })
+            .unwrap_or((false, None))
+    }
+
+    #[cfg(unix)]
+    pub fn seed_handoff_color_scheme_state(
+        &self,
+        enabled: bool,
+        last_notified: Option<crate::terminal_theme::HostAppearance>,
     ) {
         if let Ok(mut core) = self.core.lock() {
-            core.last_notified_host_appearance = Some(appearance);
+            let _ = core
+                .terminal
+                .set_color_scheme_reporting_enabled(enabled);
+            core.last_notified_host_appearance = last_notified;
         }
     }
 

@@ -38,6 +38,8 @@ pub(crate) struct ClientConnection {
     pub(crate) host_terminal_appearance: Option<crate::terminal_theme::HostAppearance>,
     /// True when appearance came from an explicit host color-scheme report.
     pub(crate) host_terminal_appearance_explicit: bool,
+    /// Explicit appearance awaiting the matching OSC 11 background reply.
+    pub(crate) pending_host_terminal_appearance: Option<crate::terminal_theme::HostAppearance>,
     /// Last reported focus state for this client's outer terminal.
     pub(crate) outer_terminal_focus: Option<bool>,
     /// Stateful parser for app-client input split across transport reads.
@@ -107,6 +109,7 @@ impl ClientConnection {
                 .background
                 .map(crate::terminal_theme::RgbColor::inferred_appearance),
             host_terminal_appearance_explicit: false,
+            pending_host_terminal_appearance: None,
             host_terminal_theme,
             outer_terminal_focus,
             raw_input: crate::raw_input::RawInputFramer::default(),
@@ -137,21 +140,24 @@ impl ClientConnection {
     pub(crate) fn update_host_theme_from_events(
         &mut self,
         events: &[crate::raw_input::RawInputEvent],
-    ) -> bool {
+    ) -> (bool, Option<crate::terminal_theme::HostAppearance>) {
         let mut next_theme = self.host_terminal_theme;
         let mut changed = false;
+        let mut notify_appearance = None;
         for event in events {
             match event {
                 crate::raw_input::RawInputEvent::HostDefaultColor { kind, color } => {
                     next_theme = next_theme.with_color(*kind, *color);
-                    if matches!(kind, crate::terminal_theme::DefaultColorKind::Background)
-                        && !self.host_terminal_appearance_explicit
-                    {
-                        changed |=
-                            self.set_host_appearance(Some(color.inferred_appearance()), false);
+                    if matches!(kind, crate::terminal_theme::DefaultColorKind::Background) {
+                        notify_appearance = self.pending_host_terminal_appearance.take();
+                        if !self.host_terminal_appearance_explicit {
+                            changed |=
+                                self.set_host_appearance(Some(color.inferred_appearance()), false);
+                        }
                     }
                 }
                 crate::raw_input::RawInputEvent::HostColorSchemeChanged(appearance) => {
+                    self.pending_host_terminal_appearance = Some(*appearance);
                     changed |= self.set_host_appearance(Some(*appearance), true);
                 }
                 _ => {}
@@ -162,7 +168,7 @@ impl ClientConnection {
             self.host_terminal_theme = next_theme;
             changed = true;
         }
-        changed
+        (changed, notify_appearance)
     }
 
     fn set_host_appearance(

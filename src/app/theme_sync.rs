@@ -24,10 +24,7 @@ impl App {
         }
         let next_theme = self.state.host_terminal_theme.with_color(kind, color);
         changed
-            | self.set_host_terminal_theme_and_maybe_notify(
-                next_theme,
-                matches!(kind, crate::terminal_theme::DefaultColorKind::Background),
-            )
+            | self.set_host_terminal_theme_and_notify_appearance(next_theme)
     }
 
     pub(super) fn set_host_terminal_appearance(
@@ -67,10 +64,17 @@ impl App {
         &mut self,
         theme: crate::terminal_theme::TerminalTheme,
     ) -> bool {
-        self.set_host_terminal_theme_and_maybe_notify(theme, true)
+        self.set_host_terminal_theme_inner(theme, false)
     }
 
-    fn set_host_terminal_theme_and_maybe_notify(
+    pub(crate) fn set_host_terminal_theme_and_notify_appearance(
+        &mut self,
+        theme: crate::terminal_theme::TerminalTheme,
+    ) -> bool {
+        self.set_host_terminal_theme_inner(theme, true)
+    }
+
+    fn set_host_terminal_theme_inner(
         &mut self,
         theme: crate::terminal_theme::TerminalTheme,
         notify_appearance: bool,

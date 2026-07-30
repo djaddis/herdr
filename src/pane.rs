@@ -1465,6 +1465,8 @@ impl PaneRuntime {
     ) -> crate::handoff_runtime::HandoffRuntimeState {
         let child_pid = self.child_pid.load(Ordering::Acquire);
         let (rows, cols, cell_width_px, cell_height_px) = self.current_size.get();
+        let (color_scheme_reporting_enabled, last_notified_host_appearance) =
+            self.terminal.handoff_color_scheme_state();
         crate::handoff_runtime::HandoffRuntimeState {
             pane_id,
             child_pid,
@@ -1479,6 +1481,11 @@ impl PaneRuntime {
             keyboard_protocol_ansi: self.terminal.kitty_keyboard_state_ansi(),
             input_state: self.input_state(),
             initial_history_ansi: None,
+            color_scheme_reporting_enabled,
+            last_notified_host_appearance_is_dark: last_notified_host_appearance
+                .map(|appearance| {
+                    matches!(appearance, crate::terminal_theme::HostAppearance::Dark)
+                }),
         }
     }
 
@@ -1501,21 +1508,23 @@ impl PaneRuntime {
         theme: crate::terminal_theme::TerminalTheme,
         appearance: Option<crate::terminal_theme::HostAppearance>,
     ) {
-        let report = self
-            .terminal
-            .apply_host_terminal_theme(theme, appearance);
-        let (Some(report), Some(appearance)) = (report, appearance) else {
-            return;
-        };
-        match self.io.try_send_bytes(report) {
-            Ok(()) => self.terminal.mark_host_appearance_notified(appearance),
-            Err(err) => {
-                warn!(
-                    pane = self.pane_id.raw(),
-                    err = %err,
-                    "failed to forward host color scheme report"
-                );
-            }
+        let mut send_error = None;
+        self.terminal
+            .apply_host_terminal_theme(theme, appearance, |report| {
+                match self.io.try_send_bytes(report) {
+                    Ok(()) => true,
+                    Err(err) => {
+                        send_error = Some(err);
+                        false
+                    }
+                }
+            });
+        if let Some(err) = send_error {
+            warn!(
+                pane = self.pane_id.raw(),
+                err = %err,
+                "failed to forward host color scheme report"
+            );
         }
     }
 
@@ -1687,6 +1696,8 @@ impl PaneRuntime {
             keyboard_protocol_ansi,
             input_state,
             initial_history_ansi,
+            color_scheme_reporting_enabled,
+            last_notified_host_appearance_is_dark,
         } = state;
         let pane_id = PaneId::from_raw(pane_id);
         use std::os::fd::FromRawFd;
@@ -1706,6 +1717,16 @@ impl PaneRuntime {
         }
         let pane_terminal = GhosttyPaneTerminal::new(terminal, response_tx.clone())?;
         pane_terminal.apply_host_terminal_theme(host_terminal_theme);
+        pane_terminal.seed_handoff_color_scheme_state(
+            color_scheme_reporting_enabled,
+            last_notified_host_appearance_is_dark.map(|is_dark| {
+                if is_dark {
+                    crate::terminal_theme::HostAppearance::Dark
+                } else {
+                    crate::terminal_theme::HostAppearance::Light
+                }
+            }),
+        );
         if let Some(input_state) = input_state {
             pane_terminal.seed_handoff_input_state(input_state);
         }
@@ -2663,6 +2684,13 @@ impl PaneRuntime {
 
 #[cfg(test)]
 impl PaneRuntime {
+    pub(crate) fn test_default_background_query_responses(&self) -> Vec<Bytes> {
+        let (tx, _rx) = mpsc::channel(1);
+        self.terminal
+            .process_pty_bytes(self.pane_id, 0, b"\x1b]11;?\x07", &tx)
+            .terminal_responses
+    }
+
     pub(crate) fn test_with_channel(cols: u16, rows: u16) -> (Self, mpsc::Receiver<Bytes>) {
         Self::test_with_channel_and_scrollback_bytes(cols, rows, 0, &[], 4)
     }
@@ -2775,11 +2803,8 @@ mod tests {
     #[tokio::test]
     async fn mode_2031_does_not_report_when_disabled() {
         let (runtime, mut child_writes) = PaneRuntime::test_with_channel(80, 24);
+        runtime.test_process_pty_bytes(b"\x1b[?2031h\x1b[?2031l");
 
-        runtime.apply_host_terminal_theme(
-            mode_2031_theme(0x10),
-            Some(crate::terminal_theme::HostAppearance::Dark),
-        );
         runtime.apply_host_terminal_theme(
             mode_2031_theme(0xf0),
             Some(crate::terminal_theme::HostAppearance::Light),
@@ -3212,6 +3237,102 @@ mod tests {
                 modify_other_keys: true,
             })
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn handoff_preserves_mode_2031_gate_and_dedupe() {
+        use std::io::Read;
+        use std::os::fd::FromRawFd;
+
+        let (runtime, mut original_child_writes) = PaneRuntime::test_with_channel(80, 24);
+        runtime.test_process_pty_bytes(b"\x1b[?2031h");
+        runtime.apply_host_terminal_theme(
+            mode_2031_theme(0x10),
+            Some(crate::terminal_theme::HostAppearance::Dark),
+        );
+        assert_eq!(
+            original_child_writes.try_recv().unwrap().as_ref(),
+            crate::terminal_theme::COLOR_SCHEME_DARK_REPORT
+        );
+        let state = runtime.handoff_runtime_state(12);
+        assert!(state.color_scheme_reporting_enabled);
+        assert_eq!(state.last_notified_host_appearance_is_dark, Some(true));
+
+        let mut master_fd = -1;
+        let mut slave_fd = -1;
+        assert_eq!(
+            unsafe {
+                libc::openpty(
+                    &mut master_fd,
+                    &mut slave_fd,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut::<libc::termios>(),
+                    std::ptr::null_mut::<libc::winsize>(),
+                )
+            },
+            0
+        );
+        let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+        assert_eq!(unsafe { libc::tcgetattr(slave_fd, termios.as_mut_ptr()) }, 0);
+        let mut termios = unsafe { termios.assume_init() };
+        unsafe {
+            libc::cfmakeraw(&mut termios);
+        }
+        assert_eq!(
+            unsafe { libc::tcsetattr(slave_fd, libc::TCSANOW, &termios) },
+            0
+        );
+        assert_ne!(unsafe { libc::fcntl(slave_fd, libc::F_SETFL, libc::O_NONBLOCK) }, -1);
+        let mut slave = unsafe { std::fs::File::from_raw_fd(slave_fd) };
+
+        let (events, _event_rx) = mpsc::channel(4);
+        let imported = PaneRuntime::from_handoff_fd(
+            crate::handoff_runtime::ImportedHandoffRuntime { master_fd, state },
+            0,
+            mode_2031_theme(0x10),
+            events,
+            Arc::new(Notify::new()),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .unwrap();
+        imported.set_handoff_reader_paused(false);
+
+        imported.apply_host_terminal_theme(
+            mode_2031_theme(0x20),
+            Some(crate::terminal_theme::HostAppearance::Dark),
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let mut bytes = [0_u8; 64];
+        assert!(matches!(
+            slave.read(&mut bytes),
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock
+        ));
+
+        imported.apply_host_terminal_theme(
+            mode_2031_theme(0xf0),
+            Some(crate::terminal_theme::HostAppearance::Light),
+        );
+        let mut received = Vec::new();
+        for _ in 0..100 {
+            match slave.read(&mut bytes) {
+                Ok(count) => {
+                    received.extend_from_slice(&bytes[..count]);
+                    if received.len() >= crate::terminal_theme::COLOR_SCHEME_LIGHT_REPORT.len() {
+                        break;
+                    }
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                }
+                Err(err) => panic!("failed to read imported PTY: {err}"),
+            }
+        }
+        assert_eq!(
+            received.as_slice(),
+            crate::terminal_theme::COLOR_SCHEME_LIGHT_REPORT
+        );
+        imported.shutdown();
     }
 
     #[cfg(unix)]

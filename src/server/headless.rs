@@ -1314,23 +1314,29 @@ impl HeadlessServer {
             return false;
         };
 
-        if !client.update_host_theme_from_events(events) {
+        let (client_changed, notify_appearance) = client.update_host_theme_from_events(events);
+        if !client_changed && notify_appearance.is_none() {
             return false;
         }
 
-        if self.foreground_client_id == Some(client_id) {
-            let mut changed = self.app.set_host_terminal_appearance_state(
-                client.host_terminal_appearance,
-                client.host_terminal_appearance_explicit,
-            );
-            changed |= self.app.set_host_terminal_theme(client.host_terminal_theme);
-            if changed {
-                self.resize_shared_runtime_to_effective_size_before_input();
-            }
-            changed
-        } else {
-            false
+        if self.foreground_client_id != Some(client_id) {
+            return false;
         }
+
+        let mut changed = self.app.set_host_terminal_appearance_state(
+            client.host_terminal_appearance,
+            client.host_terminal_appearance_explicit,
+        );
+        changed |= if notify_appearance.is_some() {
+            self.app
+                .set_host_terminal_theme_and_notify_appearance(client.host_terminal_theme)
+        } else {
+            self.app.set_host_terminal_theme(client.host_terminal_theme)
+        };
+        if changed {
+            self.resize_shared_runtime_to_effective_size_before_input();
+        }
+        changed
     }
 
     fn update_client_outer_focus_from_events(
@@ -6244,6 +6250,169 @@ next_tab = ""
 
         assert!(server.promote_client_to_foreground(2));
         assert_eq!(server.app.state.theme_name, "catppuccin-latte");
+    }
+
+    #[tokio::test]
+    async fn host_appearance_report_waits_for_background_before_notifying_pane() {
+        let mut server = test_headless_server();
+        let initial_theme = crate::terminal_theme::TerminalTheme {
+            foreground: None,
+            background: Some(crate::terminal_theme::RgbColor {
+                r: 0x10,
+                g: 0x10,
+                b: 0x10,
+            }),
+        };
+        server.app.state.host_terminal_theme = initial_theme;
+        server.app.state.host_terminal_appearance =
+            Some(crate::terminal_theme::HostAppearance::Dark);
+        let (runtime, mut child_writes) =
+            crate::terminal::TerminalRuntime::test_with_channel(80, 24);
+        runtime.test_process_pty_bytes(b"\x1b[?2031h");
+        let terminal_id = crate::terminal::TerminalId::alloc();
+        server
+            .app
+            .terminal_runtimes
+            .insert(terminal_id.clone(), runtime);
+        server.clients.insert(
+            1,
+            ClientConnection::new(
+                (80, 24),
+                crate::kitty_graphics::HostCellSize::default(),
+                initial_theme,
+                None,
+                1,
+                RenderEncoding::SemanticFrame,
+                None,
+            ),
+        );
+        server.foreground_client_id = Some(1);
+
+        server.update_client_host_theme_from_events(
+            1,
+            &[crate::raw_input::RawInputEvent::HostColorSchemeChanged(
+                crate::terminal_theme::HostAppearance::Light,
+            )],
+        );
+        assert!(child_writes.try_recv().is_err());
+
+        let new_background = crate::terminal_theme::RgbColor {
+            r: 0xf0,
+            g: 0xf0,
+            b: 0xf0,
+        };
+        assert!(server.update_client_host_theme_from_events(
+            1,
+            &[crate::raw_input::RawInputEvent::HostDefaultColor {
+                kind: crate::terminal_theme::DefaultColorKind::Background,
+                color: new_background,
+            }],
+        ));
+        assert_eq!(
+            child_writes.try_recv().unwrap().as_ref(),
+            crate::terminal_theme::COLOR_SCHEME_LIGHT_REPORT
+        );
+        assert!(child_writes.try_recv().is_err());
+        assert_eq!(
+            server
+                .app
+                .terminal_runtimes
+                .get(&terminal_id)
+                .unwrap()
+                .test_default_background_query_responses(),
+            vec![bytes::Bytes::from_static(
+                b"\x1b]11;rgb:f0f0/f0f0/f0f0\x1b\\"
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn host_foreground_only_update_does_not_notify_pane() {
+        let mut server = test_headless_server();
+        let initial_theme = crate::terminal_theme::TerminalTheme {
+            foreground: None,
+            background: Some(crate::terminal_theme::RgbColor {
+                r: 0x10,
+                g: 0x10,
+                b: 0x10,
+            }),
+        };
+        server.app.state.host_terminal_theme = initial_theme;
+        let (runtime, mut child_writes) =
+            crate::terminal::TerminalRuntime::test_with_channel(80, 24);
+        runtime.test_process_pty_bytes(b"\x1b[?2031h");
+        server
+            .app
+            .terminal_runtimes
+            .insert(crate::terminal::TerminalId::alloc(), runtime);
+        server.clients.insert(
+            1,
+            ClientConnection::new(
+                (80, 24),
+                crate::kitty_graphics::HostCellSize::default(),
+                initial_theme,
+                None,
+                1,
+                RenderEncoding::SemanticFrame,
+                None,
+            ),
+        );
+        server.foreground_client_id = Some(1);
+
+        assert!(server.update_client_host_theme_from_events(
+            1,
+            &[crate::raw_input::RawInputEvent::HostDefaultColor {
+                kind: crate::terminal_theme::DefaultColorKind::Foreground,
+                color: crate::terminal_theme::RgbColor {
+                    r: 0xaa,
+                    g: 0xbb,
+                    b: 0xcc,
+                },
+            }],
+        ));
+        assert!(child_writes.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn unchanged_foreground_theme_sync_does_not_notify_pane() {
+        let mut server = test_headless_server();
+        let theme = crate::terminal_theme::TerminalTheme {
+            foreground: None,
+            background: Some(crate::terminal_theme::RgbColor {
+                r: 0x10,
+                g: 0x10,
+                b: 0x10,
+            }),
+        };
+        server.app.state.host_terminal_theme = theme;
+        server.app.state.host_terminal_appearance =
+            Some(crate::terminal_theme::HostAppearance::Dark);
+        let (runtime, mut child_writes) =
+            crate::terminal::TerminalRuntime::test_with_channel(80, 24);
+        runtime.test_process_pty_bytes(b"\x1b[?2031h");
+        server
+            .app
+            .terminal_runtimes
+            .insert(crate::terminal::TerminalId::alloc(), runtime);
+        server.clients.insert(
+            1,
+            ClientConnection::new(
+                (80, 24),
+                crate::kitty_graphics::HostCellSize::default(),
+                theme,
+                None,
+                1,
+                RenderEncoding::SemanticFrame,
+                None,
+            ),
+        );
+        server.foreground_client_id = Some(1);
+
+        server.sync_foreground_client_state();
+        server.sync_foreground_client_state();
+
+        assert!(child_writes.try_recv().is_err());
+        assert!(!server.app.set_host_terminal_theme(theme));
     }
 
     #[test]

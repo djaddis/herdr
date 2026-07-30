@@ -704,6 +704,10 @@ impl Terminal {
         unsafe { ffi::ghostty_terminal_mode_set(self.raw, mode, value).into_result() }
     }
 
+    pub fn set_color_scheme_reporting_enabled(&mut self, enabled: bool) -> Result<(), Error> {
+        self.mode_set(MODE_COLOR_SCHEME_REPORT, enabled)
+    }
+
     pub fn enable_grapheme_cluster_mode(&mut self) -> Result<(), Error> {
         self.mode_set(MODE_GRAPHEME_CLUSTER, true)
     }

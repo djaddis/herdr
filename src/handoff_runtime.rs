@@ -18,6 +18,10 @@ pub(crate) struct HandoffRuntimeState {
     pub input_state: Option<crate::pane::InputState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_history_ansi: Option<String>,
+    #[serde(default)]
+    pub color_scheme_reporting_enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_notified_host_appearance_is_dark: Option<bool>,
 }
 
 #[cfg(unix)]
