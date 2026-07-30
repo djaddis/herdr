@@ -135,6 +135,7 @@ pub(crate) struct GhosttyPaneCore {
     pub default_color_event_tracker: DefaultColorEventTracker,
     pub child_default_foreground_changed: bool,
     pub child_default_background_changed: bool,
+    last_notified_host_appearance: Option<crate::terminal_theme::HostAppearance>,
     pub osc52_forwarder: Osc52Forwarder,
     pub cwd_osc_tracker: CwdOscTracker,
     pub osc_debug_tracker: OscDebugTracker,
@@ -271,8 +272,27 @@ impl PaneTerminal {
             .kitty_image_placements_with_data_filter(needs_data)
     }
 
-    pub fn apply_host_terminal_theme(&self, theme: crate::terminal_theme::TerminalTheme) {
-        self.ghostty.apply_host_terminal_theme(theme);
+    pub fn apply_host_terminal_theme(
+        &self,
+        theme: crate::terminal_theme::TerminalTheme,
+        appearance: Option<crate::terminal_theme::HostAppearance>,
+    ) -> Option<Bytes> {
+        match appearance {
+            Some(appearance) => self
+                .ghostty
+                .apply_host_terminal_theme_with_appearance(theme, appearance),
+            None => {
+                self.ghostty.apply_host_terminal_theme(theme);
+                None
+            }
+        }
+    }
+
+    pub fn mark_host_appearance_notified(
+        &self,
+        appearance: crate::terminal_theme::HostAppearance,
+    ) {
+        self.ghostty.mark_host_appearance_notified(appearance);
     }
 
     pub fn has_transient_default_color_override(&self) -> bool {
@@ -396,6 +416,7 @@ impl GhosttyPaneTerminal {
                 default_color_event_tracker: DefaultColorEventTracker::default(),
                 child_default_foreground_changed: false,
                 child_default_background_changed: false,
+                last_notified_host_appearance: None,
                 osc52_forwarder: Osc52Forwarder::default(),
                 cwd_osc_tracker: CwdOscTracker::default(),
                 osc_debug_tracker: OscDebugTracker::default(),
@@ -417,19 +438,61 @@ impl GhosttyPaneTerminal {
     }
 
     pub fn apply_host_terminal_theme(&self, theme: crate::terminal_theme::TerminalTheme) {
-        if let Ok(mut core) = self.core.lock() {
-            let foreground_unowned = !core.child_default_foreground_changed;
-            let background_unowned = !core.child_default_background_changed;
-            core.host_terminal_theme = theme;
-            if foreground_unowned && background_unowned {
-                core.transient_default_color_owner_pgid = None;
+        self.apply_host_terminal_theme_inner(theme, None);
+    }
+
+    pub fn apply_host_terminal_theme_with_appearance(
+        &self,
+        theme: crate::terminal_theme::TerminalTheme,
+        appearance: crate::terminal_theme::HostAppearance,
+    ) -> Option<Bytes> {
+        self.apply_host_terminal_theme_inner(theme, Some(appearance))
+    }
+
+    fn apply_host_terminal_theme_inner(
+        &self,
+        theme: crate::terminal_theme::TerminalTheme,
+        appearance: Option<crate::terminal_theme::HostAppearance>,
+    ) -> Option<Bytes> {
+        let mut core = self.core.lock().ok()?;
+        let foreground_unowned = !core.child_default_foreground_changed;
+        let background_unowned = !core.child_default_background_changed;
+        core.host_terminal_theme = theme;
+        if foreground_unowned && background_unowned {
+            core.transient_default_color_owner_pgid = None;
+        }
+        write_host_terminal_theme_selective(
+            &mut core.terminal,
+            theme,
+            foreground_unowned,
+            background_unowned,
+        );
+
+        let appearance = appearance?;
+        if core.last_notified_host_appearance == Some(appearance)
+            || !core
+                .terminal
+                .color_scheme_reporting_enabled()
+                .unwrap_or(false)
+        {
+            return None;
+        }
+        Some(Bytes::from_static(match appearance {
+            crate::terminal_theme::HostAppearance::Dark => {
+                crate::terminal_theme::COLOR_SCHEME_DARK_REPORT
             }
-            write_host_terminal_theme_selective(
-                &mut core.terminal,
-                theme,
-                foreground_unowned,
-                background_unowned,
-            );
+            crate::terminal_theme::HostAppearance::Light => {
+                crate::terminal_theme::COLOR_SCHEME_LIGHT_REPORT
+            }
+        }))
+    }
+
+    pub fn mark_host_appearance_notified(
+        &self,
+        appearance: crate::terminal_theme::HostAppearance,
+    ) {
+        if let Ok(mut core) = self.core.lock() {
+            core.last_notified_host_appearance = Some(appearance);
         }
     }
 

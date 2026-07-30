@@ -1496,8 +1496,27 @@ impl PaneRuntime {
         })
     }
 
-    pub fn apply_host_terminal_theme(&self, theme: crate::terminal_theme::TerminalTheme) {
-        self.terminal.apply_host_terminal_theme(theme);
+    pub fn apply_host_terminal_theme(
+        &self,
+        theme: crate::terminal_theme::TerminalTheme,
+        appearance: Option<crate::terminal_theme::HostAppearance>,
+    ) {
+        let report = self
+            .terminal
+            .apply_host_terminal_theme(theme, appearance);
+        let (Some(report), Some(appearance)) = (report, appearance) else {
+            return;
+        };
+        match self.io.try_send_bytes(report) {
+            Ok(()) => self.terminal.mark_host_appearance_notified(appearance),
+            Err(err) => {
+                warn!(
+                    pane = self.pane_id.raw(),
+                    err = %err,
+                    "failed to forward host color scheme report"
+                );
+            }
+        }
     }
 
     pub fn spawn(
@@ -2717,6 +2736,84 @@ impl PaneRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn mode_2031_theme(background: u8) -> crate::terminal_theme::TerminalTheme {
+        crate::terminal_theme::TerminalTheme {
+            foreground: None,
+            background: Some(crate::terminal_theme::RgbColor {
+                r: background,
+                g: background,
+                b: background,
+            }),
+        }
+    }
+
+    #[tokio::test]
+    async fn mode_2031_forwards_light_report_after_dark_theme() {
+        let (runtime, mut child_writes) = PaneRuntime::test_with_channel(80, 24);
+        runtime.test_process_pty_bytes(b"\x1b[?2031h");
+
+        runtime.apply_host_terminal_theme(
+            mode_2031_theme(0x10),
+            Some(crate::terminal_theme::HostAppearance::Dark),
+        );
+        assert_eq!(
+            child_writes.try_recv().unwrap().as_ref(),
+            crate::terminal_theme::COLOR_SCHEME_DARK_REPORT
+        );
+
+        runtime.apply_host_terminal_theme(
+            mode_2031_theme(0xf0),
+            Some(crate::terminal_theme::HostAppearance::Light),
+        );
+        assert_eq!(
+            child_writes.try_recv().unwrap().as_ref(),
+            crate::terminal_theme::COLOR_SCHEME_LIGHT_REPORT
+        );
+    }
+
+    #[tokio::test]
+    async fn mode_2031_does_not_report_when_disabled() {
+        let (runtime, mut child_writes) = PaneRuntime::test_with_channel(80, 24);
+
+        runtime.apply_host_terminal_theme(
+            mode_2031_theme(0x10),
+            Some(crate::terminal_theme::HostAppearance::Dark),
+        );
+        runtime.apply_host_terminal_theme(
+            mode_2031_theme(0xf0),
+            Some(crate::terminal_theme::HostAppearance::Light),
+        );
+
+        assert_eq!(
+            child_writes.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        );
+    }
+
+    #[tokio::test]
+    async fn mode_2031_dedupes_repeated_appearance() {
+        let (runtime, mut child_writes) = PaneRuntime::test_with_channel(80, 24);
+        runtime.test_process_pty_bytes(b"\x1b[?2031h");
+
+        runtime.apply_host_terminal_theme(
+            mode_2031_theme(0x10),
+            Some(crate::terminal_theme::HostAppearance::Dark),
+        );
+        assert_eq!(
+            child_writes.try_recv().unwrap().as_ref(),
+            crate::terminal_theme::COLOR_SCHEME_DARK_REPORT
+        );
+
+        runtime.apply_host_terminal_theme(
+            mode_2031_theme(0x20),
+            Some(crate::terminal_theme::HostAppearance::Dark),
+        );
+        assert_eq!(
+            child_writes.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        );
+    }
 
     #[test]
     fn shutdown_liveness_treats_reaped_direct_child_as_gone() {

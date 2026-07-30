@@ -199,8 +199,12 @@ impl TerminalRuntime {
         .map(Self)
     }
 
-    pub fn apply_host_terminal_theme(&self, theme: crate::terminal_theme::TerminalTheme) {
-        self.0.apply_host_terminal_theme(theme);
+    pub fn apply_host_terminal_theme(
+        &self,
+        theme: crate::terminal_theme::TerminalTheme,
+        appearance: Option<crate::terminal_theme::HostAppearance>,
+    ) {
+        self.0.apply_host_terminal_theme(theme, appearance);
     }
 
     pub fn begin_graceful_release(&self, agent: crate::detect::Agent) {

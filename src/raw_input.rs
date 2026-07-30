@@ -98,13 +98,15 @@ use crate::input::{parse_terminal_key_sequence, TerminalKey};
 use crate::terminal_theme::{
     parse_default_color_response, DefaultColorKind, HostAppearance, RgbColor,
 };
+pub(crate) use crate::terminal_theme::{
+    COLOR_SCHEME_DARK_REPORT as GHOSTTY_COLOR_SCHEME_DARK_REPORT,
+    COLOR_SCHEME_LIGHT_REPORT as GHOSTTY_COLOR_SCHEME_LIGHT_REPORT,
+};
 
 const ESC: u8 = 0x1b;
 pub(crate) const RAW_INPUT_IDLE_FLUSH_TIMEOUT_MS: i32 = 10;
 #[cfg(any(not(windows), test))]
 pub(crate) const MOUSE_ACTIVE_LONE_ESCAPE_FLUSH_TIMEOUT_MS: i32 = 150;
-pub(crate) const GHOSTTY_COLOR_SCHEME_DARK_REPORT: &[u8] = b"\x1b[?997;1n";
-pub(crate) const GHOSTTY_COLOR_SCHEME_LIGHT_REPORT: &[u8] = b"\x1b[?997;2n";
 const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
 const BRACKETED_PASTE_END: &[u8] = b"\x1b[201~";
 

@@ -37,6 +37,8 @@ pub enum DefaultColorKind {
 pub const HOST_COLOR_QUERY_SEQUENCE: &str = "\x1b]10;?\x1b\\\x1b]11;?\x1b\\";
 pub const HOST_COLOR_SCHEME_REPORT_ENABLE_SEQUENCE: &str = "\x1b[?2031h";
 pub const HOST_COLOR_SCHEME_REPORT_DISABLE_SEQUENCE: &str = "\x1b[?2031l";
+pub const COLOR_SCHEME_DARK_REPORT: &[u8] = b"\x1b[?997;1n";
+pub const COLOR_SCHEME_LIGHT_REPORT: &[u8] = b"\x1b[?997;2n";
 
 impl TerminalTheme {
     pub fn with_color(mut self, kind: DefaultColorKind, color: RgbColor) -> Self {

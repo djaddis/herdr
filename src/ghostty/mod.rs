@@ -162,6 +162,8 @@ pub const MODE_MOUSE_SGR_PIXELS: u16 = 1016;
 pub const MODE_BRACKETED_PASTE: u16 = 2004;
 pub const MODE_SYNCHRONIZED_OUTPUT: u16 = 2026;
 pub const MODE_GRAPHEME_CLUSTER: u16 = 2027;
+// GhosttyMode stores DEC-private mode numbers with the ANSI flag bit 15 clear.
+const MODE_COLOR_SCHEME_REPORT: u16 = 2031;
 // These are documented in vendor/libghostty-vt/include/ghostty/vt/terminal.h,
 // but the generated bindings do not currently expose named constants for them.
 const TERMINAL_DATA_COLOR_FOREGROUND: ffi::GhosttyTerminalData = 18;
@@ -692,6 +694,10 @@ impl Terminal {
         let mut out = false;
         unsafe { ffi::ghostty_terminal_mode_get(self.raw, mode, &mut out).into_result()? };
         Ok(out)
+    }
+
+    pub fn color_scheme_reporting_enabled(&self) -> Result<bool, Error> {
+        self.mode_get(MODE_COLOR_SCHEME_REPORT)
     }
 
     pub fn mode_set(&mut self, mode: u16, value: bool) -> Result<(), Error> {
