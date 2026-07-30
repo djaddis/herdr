@@ -605,6 +605,7 @@ impl App {
             pane_gaps: config.ui.pane_gaps,
             readable_width_columns: config.ui.readable_width_columns,
             readable_width_agents: config.ui.readable_width_agents,
+            readable_width_max_percent: config.ui.readable_width_max_percent,
             thick_pane_borders: config.ui.pane_border_weight.is_thick(),
             show_agent_labels_on_pane_borders: config.ui.show_agent_labels_on_pane_borders,
             hide_tab_bar_when_single_tab: config.ui.hide_tab_bar_when_single_tab,
@@ -1371,6 +1372,7 @@ impl App {
                 self.state.pane_gaps = config.ui.pane_gaps;
                 self.state.readable_width_columns = config.ui.readable_width_columns;
                 self.state.readable_width_agents = config.ui.readable_width_agents;
+                self.state.readable_width_max_percent = config.ui.readable_width_max_percent;
                 self.state.thick_pane_borders = config.ui.pane_border_weight.is_thick();
                 self.state.show_agent_labels_on_pane_borders =
                     config.ui.show_agent_labels_on_pane_borders;

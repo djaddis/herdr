@@ -272,8 +272,10 @@ fn compute_view_internal(
             if ws.zoomed {
                 Vec::new()
             } else {
-                ws.layout
-                    .splits_capped(terminal_area, &readable_width_caps(app, ws))
+                ws.layout.splits_capped(
+                    terminal_area,
+                    &readable_width_caps(app, ws, terminal_area.width),
+                )
             }
         })
         .unwrap_or_default();

@@ -294,7 +294,7 @@ impl App {
             return encode_error(id, "pane_layout_unavailable", "pane layout unavailable");
         };
         let area = self.state.view.terminal_area;
-        let caps = crate::ui::readable_width_caps(&self.state, tab);
+        let caps = crate::ui::readable_width_caps(&self.state, tab, area.width);
         let Some(info) = tab
             .layout
             .panes_capped(area, &caps)
@@ -1680,7 +1680,8 @@ impl App {
         direction: PaneDirection,
     ) -> Option<PaneId> {
         let tab = self.state.workspaces.get(ws_idx)?.tabs.get(tab_idx)?;
-        let caps = crate::ui::readable_width_caps(&self.state, tab);
+        let caps =
+            crate::ui::readable_width_caps(&self.state, tab, self.state.view.terminal_area.width);
         let panes = tab
             .layout
             .panes_capped(self.state.view.terminal_area, &caps);
@@ -1697,7 +1698,7 @@ impl App {
         let tab = ws.tabs.get(tab_idx)?;
         let area = self.state.view.terminal_area;
         let focused_pane_id = self.public_pane_id(ws_idx, tab.layout.focused())?;
-        let caps = crate::ui::readable_width_caps(&self.state, tab);
+        let caps = crate::ui::readable_width_caps(&self.state, tab, area.width);
         let panes = crate::ui::apply_pane_chrome(
             tab.layout.panes_capped(area, &caps),
             self.state.pane_gaps,

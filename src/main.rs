@@ -301,6 +301,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Auto-enable readable-width mode when an agent TUI is detected in a pane.
 # readable_width_agents = true
 
+# Maximum readable-width pane width as a percentage of the terminal width (10-100).
+# The effective cap is the smaller of this and readable_width_columns.
+# readable_width_max_percent = 100
+
 # Line weight for split pane borders: "standard" or "thick".
 # pane_border_weight = "standard"
 

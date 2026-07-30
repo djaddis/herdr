@@ -826,6 +826,8 @@ pub struct UiConfig {
     pub readable_width_columns: u16,
     /// Auto-enable readable-width mode when an agent TUI is detected in a pane. Default: true.
     pub readable_width_agents: bool,
+    /// Maximum readable-width pane content width as a percentage of the terminal width (10-100). Default: 100 (no percentage cap).
+    pub readable_width_max_percent: u16,
     /// Line weight for split pane borders. Saved values are "standard" or "thick". Default: "standard".
     pub pane_border_weight: PaneBorderWeightConfig,
     /// Show agent labels in split pane borders when no manual pane label is set. Default: false.
@@ -1026,6 +1028,7 @@ impl Default for UiConfig {
             pane_gaps: true,
             readable_width_columns: 120,
             readable_width_agents: true,
+            readable_width_max_percent: 100,
             pane_border_weight: PaneBorderWeightConfig::Standard,
             show_agent_labels_on_pane_borders: false,
             hide_tab_bar_when_single_tab: false,
@@ -1240,6 +1243,7 @@ agent_panel_scope = "current"
         assert!(default_config.ui.pane_gaps);
         assert_eq!(default_config.ui.readable_width_columns, 120);
         assert!(default_config.ui.readable_width_agents);
+        assert_eq!(default_config.ui.readable_width_max_percent, 100);
         assert!(!default_config.ui.pane_border_weight.is_thick());
         assert!(default_config.ui.show_scrollbars);
         assert!(!default_config.ui.show_agent_labels_on_pane_borders);
@@ -1250,6 +1254,7 @@ agent_panel_scope = "current"
 pane_gaps = true
 readable_width_columns = 100
 readable_width_agents = false
+readable_width_max_percent = 60
 show_scrollbars = false
 show_agent_labels_on_pane_borders = true
 hide_tab_bar_when_single_tab = true
@@ -1258,6 +1263,7 @@ hide_tab_bar_when_single_tab = true
         assert!(config.ui.pane_gaps);
         assert_eq!(config.ui.readable_width_columns, 100);
         assert!(!config.ui.readable_width_agents);
+        assert_eq!(config.ui.readable_width_max_percent, 60);
         assert!(!config.ui.show_scrollbars);
         assert!(config.ui.show_agent_labels_on_pane_borders);
         assert!(config.ui.hide_tab_bar_when_single_tab);

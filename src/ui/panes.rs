@@ -26,13 +26,20 @@ pub(crate) fn pane_is_scrolled_back(rt: &TerminalRuntime) -> bool {
 pub(crate) fn readable_width_caps(
     app: &AppState,
     tab: &crate::workspace::Tab,
+    area_width: u16,
 ) -> HashMap<PaneId, u16> {
     let cols = app.readable_width_columns.max(20);
     let overhead = 2 + u16::from(app.show_scrollbars);
+    let column_cap = cols.saturating_add(overhead);
+    let percent = app.readable_width_max_percent.clamp(10, 100);
+    let percent_cap = ((u32::from(area_width) * u32::from(percent)) / 100) as u16;
+    let cap = column_cap
+        .min(percent_cap)
+        .max(20u16.saturating_add(overhead));
     tab.panes
         .iter()
         .filter(|(_, pane)| pane.readable_width)
-        .map(|(id, _)| (*id, cols.saturating_add(overhead)))
+        .map(|(id, _)| (*id, cap))
         .collect()
 }
 
@@ -169,7 +176,7 @@ pub(super) fn resize_tab_panes(
     area: Rect,
     cell_size: crate::kitty_graphics::HostCellSize,
 ) {
-    let caps = readable_width_caps(app, tab);
+    let caps = readable_width_caps(app, tab, area.width);
     if tab.zoomed {
         let focused_id = tab.layout.focused();
         if let Some((terminal_id, rt)) = runtime_for_tab_pane(terminal_runtimes, tab, focused_id) {
@@ -221,7 +228,7 @@ pub(super) fn compute_pane_infos(
         return Vec::new();
     };
 
-    let caps = readable_width_caps(app, ws);
+    let caps = readable_width_caps(app, ws, area.width);
     if ws.zoomed {
         let focused_id = ws.layout.focused();
         let borders = Borders::ALL;
@@ -1166,6 +1173,49 @@ mod tests {
         assert_eq!(info.rect, Rect::new(29, 0, 42, 20));
         assert_eq!(info.borders, Borders::ALL);
         assert_eq!(info.inner_rect, Rect::new(30, 1, 40, 18));
+    }
+
+    #[tokio::test]
+    async fn readable_width_percent_cap_narrows_pane_on_wide_terminals() {
+        let mut app = AppState::test_new();
+        app.show_scrollbars = false;
+        app.readable_width_columns = 40;
+        app.readable_width_max_percent = 30;
+        let mut workspace = Workspace::test_new("test");
+        let root_pane = workspace.tabs[0].root_pane;
+        workspace.tabs[0]
+            .panes
+            .get_mut(&root_pane)
+            .unwrap()
+            .readable_width = true;
+        app.workspaces = vec![workspace];
+        app.active = Some(0);
+
+        let terminal_runtimes = TerminalRuntimeRegistry::new();
+        // 30% of 100 columns beats the 40-column cap: outer width 30, centered.
+        let infos = compute_pane_infos(
+            &app,
+            &terminal_runtimes,
+            Rect::new(0, 0, 100, 20),
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+        let info = &infos[0];
+        assert_eq!(info.rect, Rect::new(35, 0, 30, 20));
+        assert_eq!(info.inner_rect, Rect::new(36, 1, 28, 18));
+
+        // On a narrow terminal the column cap wins and the percent cap is
+        // floored so panes never collapse below 20 content columns.
+        let infos = compute_pane_infos(
+            &app,
+            &terminal_runtimes,
+            Rect::new(0, 0, 60, 20),
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+        let info = &infos[0];
+        assert_eq!(info.rect, Rect::new(19, 0, 22, 20));
+        assert_eq!(info.inner_rect, Rect::new(20, 1, 20, 18));
     }
 
     #[tokio::test]
