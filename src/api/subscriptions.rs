@@ -88,6 +88,30 @@ impl PanePresentationSnapshot {
     }
 }
 
+/// Whether a waiter/filter asking for `wanted` is satisfied by seeing `current`.
+///
+/// `done` is a UI attention state (`idle` + not yet seen by the user), so a
+/// completion can surface as `idle` when the pane is being watched, and a
+/// `done` pane silently decays to `idle` once viewed. Waiters asking for
+/// `idle` mean "not running", which `done` also satisfies; waiters asking for
+/// `done` mean "a run completed", which an `idle` reached from
+/// `working`/`blocked` also satisfies.
+fn wait_status_satisfied(
+    wanted: crate::api::schema::AgentStatus,
+    current: crate::api::schema::AgentStatus,
+    previous: Option<crate::api::schema::AgentStatus>,
+) -> bool {
+    use crate::api::schema::AgentStatus;
+    match (wanted, current) {
+        _ if wanted == current => true,
+        (AgentStatus::Idle, AgentStatus::Done) => true,
+        (AgentStatus::Done, AgentStatus::Idle) => {
+            matches!(previous, Some(AgentStatus::Working | AgentStatus::Blocked))
+        }
+        _ => false,
+    }
+}
+
 pub(super) struct ActiveEventSubscription {
     event_kind: crate::api::schema::EventKind,
     last_sequence: u64,
@@ -245,7 +269,7 @@ impl ActiveSubscription {
                 let last_status = probe.agent_status;
                 let last_presentation = PanePresentationSnapshot::from(&probe);
                 let initial_event = agent_status
-                    .is_some_and(|wanted| wanted == probe.agent_status)
+                    .is_some_and(|wanted| wait_status_satisfied(wanted, probe.agent_status, None))
                     .then_some(PaneAgentStatusChangedEvent {
                         pane_id: probe.pane_id.clone(),
                         workspace_id: probe.workspace_id,
@@ -373,11 +397,11 @@ impl ActiveAgentStatusChangedSubscription {
                 &custom_status,
                 &state_labels,
             );
-            self.last_status = Some(agent_status);
+            let previous_status = self.last_status.replace(agent_status);
             self.last_presentation = Some(current_presentation);
             if self
                 .status_filter
-                .is_some_and(|wanted| wanted != agent_status)
+                .is_some_and(|wanted| !wait_status_satisfied(wanted, agent_status, previous_status))
             {
                 continue;
             }
@@ -445,7 +469,7 @@ impl ActiveAgentStatusChangedSubscription {
         }
         if self
             .status_filter
-            .is_some_and(|wanted| wanted != current_status)
+            .is_some_and(|wanted| !wait_status_satisfied(wanted, current_status, previous_status))
         {
             return None;
         }
@@ -574,6 +598,147 @@ mod tests {
                 state_labels: HashMap::new(),
             },
         }
+    }
+
+    fn agent_status_change_event(agent_status: AgentStatus) -> EventEnvelope {
+        EventEnvelope {
+            event: EventKind::PaneAgentStatusChanged,
+            data: EventData::PaneAgentStatusChanged {
+                pane_id: "pane_1".into(),
+                workspace_id: "workspace_1".into(),
+                agent_status,
+                agent: Some("omp".into()),
+                title: None,
+                display_agent: None,
+                custom_status: None,
+                state_labels: HashMap::new(),
+            },
+        }
+    }
+
+    fn subscription_with_filter(
+        event_hub: &EventHub,
+        status_filter: Option<AgentStatus>,
+        last_status: AgentStatus,
+    ) -> ActiveAgentStatusChangedSubscription {
+        ActiveAgentStatusChangedSubscription {
+            pane_id: "pane_1".into(),
+            status_filter,
+            last_status: Some(last_status),
+            last_presentation: Some(PanePresentationSnapshot {
+                title: None,
+                display_agent: None,
+                custom_status: None,
+                state_labels: HashMap::new(),
+            }),
+            last_sequence: event_hub.current_sequence(),
+            initial_event: None,
+            request_prefix: "test".into(),
+        }
+    }
+
+    fn polled_status(
+        subscription: &mut ActiveAgentStatusChangedSubscription,
+        event_hub: &EventHub,
+    ) -> Option<AgentStatus> {
+        let event = subscription.poll(&tokio::sync::mpsc::unbounded_channel().0, event_hub)?;
+        let SubscriptionEventData::PaneAgentStatusChanged(data) = event.data else {
+            panic!("wrong event data");
+        };
+        Some(data.agent_status)
+    }
+
+    #[test]
+    fn wait_status_satisfied_treats_done_as_idle_and_completion_as_done() {
+        assert!(wait_status_satisfied(
+            AgentStatus::Idle,
+            AgentStatus::Done,
+            None
+        ));
+        assert!(wait_status_satisfied(
+            AgentStatus::Done,
+            AgentStatus::Idle,
+            Some(AgentStatus::Working)
+        ));
+        assert!(wait_status_satisfied(
+            AgentStatus::Done,
+            AgentStatus::Idle,
+            Some(AgentStatus::Blocked)
+        ));
+        assert!(!wait_status_satisfied(
+            AgentStatus::Done,
+            AgentStatus::Idle,
+            None
+        ));
+        assert!(!wait_status_satisfied(
+            AgentStatus::Done,
+            AgentStatus::Idle,
+            Some(AgentStatus::Done)
+        ));
+        assert!(!wait_status_satisfied(
+            AgentStatus::Working,
+            AgentStatus::Idle,
+            Some(AgentStatus::Working)
+        ));
+    }
+
+    #[test]
+    fn done_filter_matches_completion_that_lands_on_idle() {
+        // A watched pane is marked seen on completion, so the event stream
+        // reports working -> idle instead of working -> done. A waiter for
+        // done must still treat that edge as completion.
+        let event_hub = EventHub::default();
+        let mut subscription =
+            subscription_with_filter(&event_hub, Some(AgentStatus::Done), AgentStatus::Working);
+
+        event_hub.push(agent_status_change_event(AgentStatus::Idle));
+
+        assert_eq!(
+            polled_status(&mut subscription, &event_hub),
+            Some(AgentStatus::Idle)
+        );
+    }
+
+    #[test]
+    fn done_filter_ignores_done_to_idle_decay() {
+        // Viewing a done pane silently turns it idle; that is not a new
+        // completion and must not wake a done waiter. Only the later real
+        // completion (working -> idle) may match.
+        let event_hub = EventHub::default();
+        let mut subscription =
+            subscription_with_filter(&event_hub, Some(AgentStatus::Done), AgentStatus::Done);
+
+        let mut decay_event = agent_status_change_event(AgentStatus::Idle);
+        let EventData::PaneAgentStatusChanged { custom_status, .. } = &mut decay_event.data else {
+            panic!("wrong event data");
+        };
+        *custom_status = Some("decay".into());
+        event_hub.push(decay_event);
+        event_hub.push(agent_status_change_event(AgentStatus::Working));
+        event_hub.push(agent_status_change_event(AgentStatus::Idle));
+
+        let event = subscription
+            .poll(&tokio::sync::mpsc::unbounded_channel().0, &event_hub)
+            .expect("completion event");
+        let SubscriptionEventData::PaneAgentStatusChanged(data) = event.data else {
+            panic!("wrong event data");
+        };
+        assert_eq!(data.agent_status, AgentStatus::Idle);
+        assert_eq!(data.custom_status, None, "decay event must not match");
+    }
+
+    #[test]
+    fn idle_filter_matches_done_event() {
+        let event_hub = EventHub::default();
+        let mut subscription =
+            subscription_with_filter(&event_hub, Some(AgentStatus::Idle), AgentStatus::Working);
+
+        event_hub.push(agent_status_change_event(AgentStatus::Done));
+
+        assert_eq!(
+            polled_status(&mut subscription, &event_hub),
+            Some(AgentStatus::Done)
+        );
     }
 
     #[test]
