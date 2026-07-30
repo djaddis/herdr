@@ -2171,6 +2171,29 @@
           ],
           "type": "object"
         },
+        "PaneReadableWidthMode": {
+          "enum": [
+            "toggle",
+            "on",
+            "off"
+          ],
+          "type": "string"
+        },
+        "PaneReadableWidthParams": {
+          "properties": {
+            "mode": {
+              "$ref": "#/schemas/request/$defs/PaneReadableWidthMode",
+              "default": "toggle"
+            },
+            "pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "PaneReleaseAgentParams": {
           "properties": {
             "agent": {
@@ -4312,6 +4335,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/PaneZoomParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.readable_width",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneReadableWidthParams"
             }
           },
           "required": [
@@ -6772,6 +6811,25 @@
           ],
           "type": "object"
         },
+        "PaneReadableWidthResult": {
+          "properties": {
+            "changed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "changed",
+            "enabled",
+            "pane_id"
+          ],
+          "type": "object"
+        },
         "PaneResizeReason": {
           "enum": [
             "unchanged"
@@ -7861,6 +7919,22 @@
               "required": [
                 "type",
                 "zoom"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "readable_width": {
+                  "$ref": "#/schemas/success_response/$defs/PaneReadableWidthResult"
+                },
+                "type": {
+                  "const": "pane_readable_width",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "readable_width"
               ],
               "type": "object"
             },
