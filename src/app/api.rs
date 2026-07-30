@@ -1777,6 +1777,59 @@ mod tests {
     }
 
     #[test]
+    fn hook_state_completion_emits_events_with_previous_agent_status() {
+        let event_hub = crate::api::EventHub::default();
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &crate::config::Config::default(),
+            true,
+            None,
+            api_rx,
+            event_hub.clone(),
+        );
+        app.state.workspaces = vec![crate::workspace::Workspace::test_new("hook-events")];
+        app.state.ensure_test_terminals();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+
+        for (state, seq) in [
+            (crate::detect::AgentState::Working, 1),
+            (crate::detect::AgentState::Idle, 2),
+        ] {
+            app.handle_internal_event(crate::events::AppEvent::HookStateReported {
+                pane_id,
+                source: "herdr:omp".into(),
+                agent_label: "omp".into(),
+                state,
+                message: None,
+                custom_status: None,
+                seq: Some(seq),
+                session_ref: None,
+            });
+        }
+
+        let statuses: Vec<_> = event_hub
+            .events_after(0)
+            .into_iter()
+            .filter_map(|(_, event)| match event.data {
+                crate::api::schema::EventData::PaneAgentStatusChanged {
+                    agent_status,
+                    previous_agent_status,
+                    ..
+                } => Some((agent_status, previous_agent_status)),
+                _ => None,
+            })
+            .collect();
+        use crate::api::schema::AgentStatus;
+        assert_eq!(
+            statuses,
+            vec![
+                (AgentStatus::Working, Some(AgentStatus::Unknown)),
+                (AgentStatus::Done, Some(AgentStatus::Working)),
+            ]
+        );
+    }
+
+    #[test]
     fn overlay_exit_layout_updated_uses_restored_zoom_state() {
         let event_hub = crate::api::EventHub::default();
         let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
