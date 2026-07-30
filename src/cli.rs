@@ -856,6 +856,7 @@ fn wait_for_agent_status_change(
                 display_agent,
                 custom_status,
                 state_labels,
+                ..
             } = event.data
             else {
                 return Err(std::io::Error::other("unexpected wait event data"));

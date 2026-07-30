@@ -142,11 +142,11 @@ pub(super) fn wait_for_event(
         Ok(subscription) => subscription,
         Err(response) => return Ok(Some(serde_json::to_string(&response).unwrap())),
     };
-    let mut active = match ActiveSubscription::new(subscription, &request_id, 0, api_tx, event_hub)
-    {
-        Ok(active) => active,
-        Err(response) => return Ok(Some(serde_json::to_string(&response).unwrap())),
-    };
+    let mut active =
+        match ActiveSubscription::new(subscription, &request_id, 0, api_tx, event_hub, true) {
+            Ok(active) => active,
+            Err(response) => return Ok(Some(serde_json::to_string(&response).unwrap())),
+        };
 
     loop {
         if should_stop_connection(stream, running)? {
@@ -228,6 +228,7 @@ fn wait_matched_response(request_id: &str, event: serde_json::Value) -> String {
                     pane_id: data.pane_id,
                     workspace_id: data.workspace_id,
                     agent_status: data.agent_status,
+                    previous_agent_status: None,
                     agent: data.agent,
                     title: data.title,
                     display_agent: data.display_agent,

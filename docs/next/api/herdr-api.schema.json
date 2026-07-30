@@ -609,6 +609,16 @@
                 "pane_id": {
                   "type": "string"
                 },
+                "previous_agent_status": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/schemas/event/$defs/AgentStatus"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "state_labels": {
                   "additionalProperties": {
                     "type": "string"
@@ -5928,6 +5938,16 @@
                 },
                 "pane_id": {
                   "type": "string"
+                },
+                "previous_agent_status": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/schemas/success_response/$defs/AgentStatus"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "state_labels": {
                   "additionalProperties": {

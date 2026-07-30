@@ -560,6 +560,7 @@ impl App {
                     pane_id,
                     workspace_id,
                     agent_status,
+                    previous_agent_status: Some(previous_agent_status),
                     agent: update.agent_label.clone(),
                     title: presentation.title,
                     display_agent: presentation.display_agent,
