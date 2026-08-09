@@ -1482,10 +1482,9 @@ impl PaneRuntime {
             input_state: self.input_state(),
             initial_history_ansi: None,
             color_scheme_reporting_enabled,
-            last_notified_host_appearance_is_dark: last_notified_host_appearance
-                .map(|appearance| {
-                    matches!(appearance, crate::terminal_theme::HostAppearance::Dark)
-                }),
+            last_notified_host_appearance_is_dark: last_notified_host_appearance.map(
+                |appearance| matches!(appearance, crate::terminal_theme::HostAppearance::Dark),
+            ),
         }
     }
 
@@ -3274,7 +3273,10 @@ mod tests {
             0
         );
         let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
-        assert_eq!(unsafe { libc::tcgetattr(slave_fd, termios.as_mut_ptr()) }, 0);
+        assert_eq!(
+            unsafe { libc::tcgetattr(slave_fd, termios.as_mut_ptr()) },
+            0
+        );
         let mut termios = unsafe { termios.assume_init() };
         unsafe {
             libc::cfmakeraw(&mut termios);
@@ -3283,7 +3285,10 @@ mod tests {
             unsafe { libc::tcsetattr(slave_fd, libc::TCSANOW, &termios) },
             0
         );
-        assert_ne!(unsafe { libc::fcntl(slave_fd, libc::F_SETFL, libc::O_NONBLOCK) }, -1);
+        assert_ne!(
+            unsafe { libc::fcntl(slave_fd, libc::F_SETFL, libc::O_NONBLOCK) },
+            -1
+        );
         let mut slave = unsafe { std::fs::File::from_raw_fd(slave_fd) };
 
         let (events, _event_rx) = mpsc::channel(4);

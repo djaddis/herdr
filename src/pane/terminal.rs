@@ -509,9 +509,7 @@ impl GhosttyPaneTerminal {
         last_notified: Option<crate::terminal_theme::HostAppearance>,
     ) {
         if let Ok(mut core) = self.core.lock() {
-            let _ = core
-                .terminal
-                .set_color_scheme_reporting_enabled(enabled);
+            let _ = core.terminal.set_color_scheme_reporting_enabled(enabled);
             core.last_notified_host_appearance = last_notified;
         }
     }
@@ -1120,6 +1118,10 @@ impl GhosttyPaneTerminal {
         key: crate::input::TerminalKey,
         protocol: crate::input::KeyboardProtocol,
     ) -> Vec<u8> {
+        if ghostty_prefers_legacy_alt_backspace(key) {
+            return crate::input::encode_terminal_key(key, crate::input::KeyboardProtocol::Legacy);
+        }
+
         if ghostty_prefers_herdr_text_encoding(key) {
             return crate::input::encode_terminal_key(key, protocol);
         }
@@ -1423,6 +1425,11 @@ fn encoded_key_preserves_event_kind(
         .is_some_and(|parsed| {
             parsed.code == key.code && parsed.modifiers == key.modifiers && parsed.kind == key.kind
         })
+}
+
+fn ghostty_prefers_legacy_alt_backspace(key: crate::input::TerminalKey) -> bool {
+    key.code == crossterm::event::KeyCode::Backspace
+        && key.modifiers == crossterm::event::KeyModifiers::ALT
 }
 
 fn cursor_position_settle_pending(core: &GhosttyPaneCore) -> bool {
@@ -3091,7 +3098,7 @@ mod tests {
     }
 
     #[test]
-    fn ghostty_kitty_pane_encodes_parsed_legacy_alt_backspace_as_csi_u() {
+    fn ghostty_kitty_pane_preserves_legacy_alt_backspace_word_delete() {
         let (tx, _rx) = mpsc::channel(4);
         let terminal = crate::ghostty::Terminal::new(80, 24, 0).unwrap();
         let pane = GhosttyPaneTerminal::new(terminal, tx.clone()).unwrap();
@@ -3101,7 +3108,7 @@ mod tests {
         let key = crate::input::parse_terminal_key_sequence("\x1b\x7f").unwrap();
         let encoded = pane.encode_terminal_key(key, crate::input::KeyboardProtocol::Legacy);
 
-        assert_eq!(encoded, b"\x1b[127;3u");
+        assert_eq!(encoded, b"\x1b\x7f");
     }
 
     #[test]
