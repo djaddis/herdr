@@ -1054,6 +1054,8 @@ pub struct ThemeRuntimeConfig {
     pub light_name: String,
     pub auto_switch: bool,
     pub custom: Option<crate::config::CustomThemeColors>,
+    pub custom_dark: Option<crate::config::CustomThemeColors>,
+    pub custom_light: Option<crate::config::CustomThemeColors>,
     pub legacy_accent: Option<String>,
 }
 
@@ -1830,6 +1832,8 @@ impl AppState {
                 light_name: "catppuccin-latte".to_string(),
                 auto_switch: false,
                 custom: None,
+                custom_dark: None,
+                custom_light: None,
                 legacy_accent: None,
             },
             host_terminal_appearance: None,

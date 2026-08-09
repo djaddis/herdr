@@ -23,8 +23,7 @@ impl App {
             changed |= self.set_host_terminal_appearance(color.inferred_appearance(), false);
         }
         let next_theme = self.state.host_terminal_theme.with_color(kind, color);
-        changed
-            | self.set_host_terminal_theme_and_notify_appearance(next_theme)
+        changed | self.set_host_terminal_theme_and_notify_appearance(next_theme)
     }
 
     pub(super) fn set_host_terminal_appearance(

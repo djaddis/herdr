@@ -10,6 +10,9 @@ use tracing::warn;
 /// [theme.custom]        # override individual tokens on top of the base
 /// accent = "#f5c2e7"
 /// red = "#ff6188"
+///
+/// [theme.custom_light]  # only when auto_switch selects light mode
+/// panel_bg = "#d8d9e0"
 /// ```
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
@@ -24,6 +27,10 @@ pub struct ThemeConfig {
     pub light_name: Option<String>,
     /// Custom overrides — applied on top of the selected base theme.
     pub custom: Option<CustomThemeColors>,
+    /// Custom overrides applied only when `auto_switch` selects dark mode.
+    pub custom_dark: Option<CustomThemeColors>,
+    /// Custom overrides applied only when `auto_switch` selects light mode.
+    pub custom_light: Option<CustomThemeColors>,
 }
 
 /// Per-token color overrides. All fields optional — only set what you want to change.
@@ -181,6 +188,28 @@ pane_border_inactive = "#d8d9e0"
     }
 
     #[test]
+    fn theme_custom_appearance_overrides_parse() {
+        let toml = r##"
+[theme]
+name = "tokyo-night"
+auto_switch = true
+
+[theme.custom_light]
+panel_bg = "#d8d9e0"
+sidebar_bg = "#d8d9e0"
+
+[theme.custom_dark]
+panel_bg = "#1a1b26"
+"##;
+        let config: Config = toml::from_str(toml).unwrap();
+        let light = config.theme.custom_light.as_ref().unwrap();
+        let dark = config.theme.custom_dark.as_ref().unwrap();
+        assert_eq!(light.panel_bg.as_deref(), Some("#d8d9e0"));
+        assert_eq!(light.sidebar_bg.as_deref(), Some("#d8d9e0"));
+        assert_eq!(dark.panel_bg.as_deref(), Some("#1a1b26"));
+    }
+
+    #[test]
     fn theme_defaults_when_missing() {
         let config: Config = toml::from_str("").unwrap();
         assert!(config.theme.name.is_none());
@@ -188,5 +217,7 @@ pane_border_inactive = "#d8d9e0"
         assert!(config.theme.dark_name.is_none());
         assert!(config.theme.light_name.is_none());
         assert!(config.theme.custom.is_none());
+        assert!(config.theme.custom_dark.is_none());
+        assert!(config.theme.custom_light.is_none());
     }
 }
