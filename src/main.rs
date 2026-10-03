@@ -87,6 +87,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # sidebar_bg = "#181825"
 # active_row_bg = "#1e1e2e"
 # selection_bg = "#313244"
+# pane_border_inactive = "#45475a"   # unfocused pane borders; "reset" uses overlay0
 # panel_bg = "reset"
 # accent = "#f5c2e7"
 # red = "#ff6188"
@@ -299,6 +300,9 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Draw interactive scrollbars beside terminal panes.
 # Set false to reclaim the scrollbar column and keep it out of terminal-native selections.
 # pane_scrollbars = true
+
+# Pane border line weight: "standard" (light box drawing) or "thick" (heavy).
+# pane_border_weight = "standard"
 
 # Keep split panes visually separated instead of sharing divider borders.
 # pane_gaps = true

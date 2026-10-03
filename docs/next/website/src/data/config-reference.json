@@ -89,6 +89,12 @@
           "description": "Set the Navigate-mode cursor row background in the sidebar without changing other selection surfaces. Accepts hex, named colors, rgb(r,g,b), or reset aliases."
         },
         {
+          "key": "theme.custom.pane_border_inactive",
+          "type": "color",
+          "default": "unset",
+          "description": "Set the border color of unfocused panes. Unset or reset uses overlay0; focused panes always use accent. Accepts hex, named colors, rgb(r,g,b), or reset aliases."
+        },
+        {
           "key": "theme.custom.surface0",
           "type": "color",
           "default": "unset",
@@ -203,6 +209,12 @@
           "description": "Override the selection_bg color token when auto_switch selects a light appearance. Applied after theme.custom. Accepts hex, named colors, rgb(r,g,b), or reset aliases."
         },
         {
+          "key": "theme.custom.light.pane_border_inactive",
+          "type": "color",
+          "default": "unset",
+          "description": "Override the pane_border_inactive color token when auto_switch selects a light appearance. Applied after theme.custom. Accepts hex, named colors, rgb(r,g,b), or reset aliases."
+        },
+        {
           "key": "theme.custom.light.surface0",
           "type": "color",
           "default": "unset",
@@ -315,6 +327,12 @@
           "type": "color",
           "default": "unset",
           "description": "Override the selection_bg color token when auto_switch selects a dark appearance. Applied after theme.custom. Accepts hex, named colors, rgb(r,g,b), or reset aliases."
+        },
+        {
+          "key": "theme.custom.dark.pane_border_inactive",
+          "type": "color",
+          "default": "unset",
+          "description": "Override the pane_border_inactive color token when auto_switch selects a dark appearance. Applied after theme.custom. Accepts hex, named colors, rgb(r,g,b), or reset aliases."
         },
         {
           "key": "theme.custom.dark.surface0",
@@ -980,6 +998,16 @@
           "type": "boolean",
           "default": "true",
           "description": "Draw interactive scrollbars beside terminal panes. Disable to reclaim the scrollbar column and keep it out of terminal-native selections."
+        },
+        {
+          "key": "ui.pane_border_weight",
+          "type": "enum",
+          "default": "\"standard\"",
+          "description": "Line weight for pane borders: light box-drawing glyphs or heavy ones.",
+          "values": [
+            "standard",
+            "thick"
+          ]
         },
         {
           "key": "ui.pane_gaps",

@@ -934,6 +934,15 @@ impl<'de> Deserialize<'de> for PaneBordersConfig {
     }
 }
 
+/// Line weight for pane border glyphs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PaneBorderWeightConfig {
+    #[default]
+    Standard,
+    Thick,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct UiConfig {
@@ -976,6 +985,9 @@ pub struct UiConfig {
     pub pane_outer_borders: bool,
     /// Draw interactive scrollbars beside terminal panes. Default: true.
     pub pane_scrollbars: bool,
+    /// Line weight for pane borders: standard (light box drawing) or thick
+    /// (heavy box drawing). Default: standard.
+    pub pane_border_weight: PaneBorderWeightConfig,
     /// Keep split panes visually separated instead of sharing divider borders. Default: true.
     pub pane_gaps: bool,
     /// Show agent labels in split pane borders when no manual pane label is set. Default: false.
@@ -1211,6 +1223,7 @@ impl Default for UiConfig {
             prompt_new_tab_name: true,
             prompt_new_workspace_name: false,
             pane_borders: PaneBordersConfig::Auto,
+            pane_border_weight: PaneBorderWeightConfig::Standard,
             pane_outer_borders: true,
             pane_scrollbars: true,
             pane_gaps: true,
@@ -1510,6 +1523,14 @@ status_indicators = "symbols"
             .unwrap_err()
             .to_string();
         assert!(wrong_type.contains("\"auto\", \"always\", \"off\", or a legacy boolean"));
+    }
+
+    #[test]
+    fn pane_border_weight_parses_and_rejects_unknown_values() {
+        let thick: Config = toml::from_str("[ui]\npane_border_weight = \"thick\"").unwrap();
+        assert_eq!(thick.ui.pane_border_weight, PaneBorderWeightConfig::Thick);
+
+        assert!(toml::from_str::<Config>("[ui]\npane_border_weight = \"heavy\"").is_err());
     }
 
     #[test]
