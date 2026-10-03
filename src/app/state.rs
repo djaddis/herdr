@@ -873,6 +873,10 @@ pub struct AppState {
     pub readable_width_columns: u16,
     pub readable_width_agents: bool,
     pub readable_width_max_percent: u16,
+    /// Panes whose readable-width flag changed outside a geometry-claiming
+    /// request (agent auto-enable/revert, settings reload). The server drains
+    /// this to emit `layout.updated` and resize the affected tabs.
+    pub readable_width_geometry_changed: Vec<crate::layout::PaneId>,
     pub show_agent_labels_on_pane_borders: bool,
     pub tab_bar_right: Vec<TabBarStatusSegment>,
     pub tab_bar_right_separator: String,
@@ -1119,6 +1123,7 @@ impl AppState {
             readable_width_columns: 120,
             readable_width_agents: true,
             readable_width_max_percent: 100,
+            readable_width_geometry_changed: Vec::new(),
             show_agent_labels_on_pane_borders: false,
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: " ".into(),

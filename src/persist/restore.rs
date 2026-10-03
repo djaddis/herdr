@@ -762,10 +762,12 @@ fn restore_tab(
     }
 
     for (id, pane) in &mut panes {
-        pane.readable_width = reverse_id_map
+        let saved = reverse_id_map
             .get(id)
-            .and_then(|old_id| snap.panes.get(old_id))
-            .is_some_and(|saved| saved.readable_width);
+            .and_then(|old_id| snap.panes.get(old_id));
+        pane.readable_width = saved.is_some_and(|saved| saved.readable_width);
+        pane.readable_width_auto =
+            pane.readable_width && saved.is_some_and(|saved| saved.readable_width_auto);
     }
 
     if panes.is_empty() {
@@ -1562,6 +1564,7 @@ mod tests {
                             agent_resume: None,
                             launch_argv: None,
                             readable_width: false,
+                            readable_width_auto: false,
                         },
                     )]),
                     zoomed: false,
@@ -1645,6 +1648,7 @@ mod tests {
                                 agent_resume: None,
                                 launch_argv: None,
                                 readable_width: false,
+                                readable_width_auto: false,
                             },
                         ),
                         (
@@ -1658,6 +1662,7 @@ mod tests {
                                 agent_resume: None,
                                 launch_argv: None,
                                 readable_width: true,
+                                readable_width_auto: true,
                             },
                         ),
                     ]),
@@ -1697,10 +1702,11 @@ mod tests {
         assert_eq!(workspace.tabs[0].number, 5);
         assert_eq!(workspace.next_public_tab_number, 6);
         for (pane_id, number) in &workspace.public_pane_numbers {
+            let pane = &workspace.tabs[0].panes[pane_id];
             assert_eq!(
-                workspace.tabs[0].panes[pane_id].readable_width,
-                *number == 3,
-                "readable_width must follow the remapped pane"
+                (pane.readable_width, pane.readable_width_auto),
+                (*number == 3, *number == 3),
+                "readable-width flags must follow the remapped pane"
             );
         }
     }
@@ -1720,6 +1726,7 @@ mod tests {
                     agent_resume: None,
                     launch_argv: None,
                     readable_width: false,
+                    readable_width_auto: false,
                 },
             )
         };
@@ -1737,6 +1744,7 @@ mod tests {
             agent_resume: None,
             launch_argv: None,
             readable_width: false,
+            readable_width_auto: false,
         };
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
@@ -1890,6 +1898,7 @@ mod tests {
                             agent_resume: None,
                             launch_argv: None,
                             readable_width: false,
+                            readable_width_auto: false,
                         },
                     )]),
                     zoomed: false,
@@ -2197,6 +2206,7 @@ mod tests {
                 agent_resume: None,
                 launch_argv: None,
                 readable_width: false,
+                readable_width_auto: false,
             },
         );
         let mut history = SessionHistorySnapshot {
