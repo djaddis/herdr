@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ratatui::{
     buffer::Buffer,
     layout::{Direction, Rect},
@@ -20,6 +22,44 @@ use crate::terminal::{TerminalRuntime, TerminalRuntimeRegistry};
 pub(crate) fn pane_is_scrolled_back(rt: &TerminalRuntime) -> bool {
     rt.scroll_metrics()
         .is_some_and(|metrics| metrics.offset_from_bottom > 0)
+}
+
+/// Minimum content columns a readable-width pane keeps under the percent cap.
+const READABLE_WIDTH_MIN_COLUMNS: u16 = 20;
+
+/// Max outer width per readable-width pane in `tab` when laid out in an area
+/// `area_width` columns wide. The cap is the smaller of
+/// `readable_width_columns` plus pane chrome and `readable_width_max_percent`
+/// of the area, floored at 20 content columns. Empty when no pane opts in.
+pub(crate) fn readable_width_caps(
+    app: &AppState,
+    tab: &crate::workspace::Tab,
+    area_width: u16,
+) -> HashMap<PaneId, u16> {
+    if !tab.panes.values().any(|pane| pane.readable_width) {
+        return HashMap::new();
+    }
+    let multi_pane = tab.layout.pane_count() > 1;
+    let border_overhead = if app.pane_borders.shows_borders(multi_pane) {
+        2
+    } else {
+        0
+    };
+    let overhead = border_overhead + u16::from(app.pane_scrollbars);
+    let column_cap = app
+        .readable_width_columns
+        .max(READABLE_WIDTH_MIN_COLUMNS)
+        .saturating_add(overhead);
+    let percent = app.readable_width_max_percent.clamp(10, 100);
+    let percent_cap = (u32::from(area_width) * u32::from(percent) / 100) as u16;
+    let cap = column_cap
+        .min(percent_cap)
+        .max(READABLE_WIDTH_MIN_COLUMNS.saturating_add(overhead));
+    tab.panes
+        .iter()
+        .filter(|(_, pane)| pane.readable_width)
+        .map(|(id, _)| (*id, cap))
+        .collect()
 }
 
 fn pane_border_title(label: &str, pane_width: u16, _focused: bool) -> Option<String> {
@@ -102,11 +142,13 @@ pub(crate) fn new_pane_terminal_size(
         NewPanePlacement::Alone => alone(),
         NewPanePlacement::Existing { ws_idx, pane } => tab_for(ws_idx, pane)
             .and_then(|tab| {
+                let caps = readable_width_caps(app, tab, area.width);
                 if tab.zoomed && tab.layout.focused() == pane {
                     let multi_pane = tab.layout.pane_count() > 1;
-                    return Some(pane_inner_rect(area, zoomed_pane_borders(app, multi_pane)));
+                    let rect = crate::layout::shrink_to_desired(area, caps.get(&pane).copied());
+                    return Some(pane_inner_rect(rect, zoomed_pane_borders(app, multi_pane)));
                 }
-                let panes = tab.layout.panes(area);
+                let panes = tab.layout.panes_capped(area, &caps);
                 let index = panes.iter().position(|info| info.id == pane)?;
                 Some(laid_out(panes, index))
             })
@@ -118,7 +160,11 @@ pub(crate) fn new_pane_terminal_size(
             direction,
             ratio,
         } => tab_for(ws_idx, target)
-            .and_then(|tab| tab.layout.panes_after_split(area, target, direction, ratio))
+            .and_then(|tab| {
+                let caps = readable_width_caps(app, tab, area.width);
+                tab.layout
+                    .panes_after_split(area, &caps, target, direction, ratio)
+            })
             .map(|(panes, new_index)| laid_out(panes, new_index))
             .unwrap_or_else(alone),
     };
@@ -320,13 +366,15 @@ pub(super) fn resize_tab_panes(
     cell_size: crate::kitty_graphics::HostCellSize,
 ) {
     let multi_pane = tab.layout.pane_count() > 1;
+    let caps = readable_width_caps(app, tab, area.width);
 
     if tab.zoomed {
         let focused_id = tab.layout.focused();
         if let Some((terminal_id, rt)) =
             runtime_for_tab_pane(app, terminal_runtimes, workspace_index, tab, focused_id)
         {
-            let pane_inner = pane_inner_rect(area, zoomed_pane_borders(app, multi_pane));
+            let pane_rect = crate::layout::shrink_to_desired(area, caps.get(&focused_id).copied());
+            let pane_inner = pane_inner_rect(pane_rect, zoomed_pane_borders(app, multi_pane));
             let inner_rect = terminal_inner_rect(rt, pane_inner, app.pane_scrollbars);
             if !app.direct_attach_resize_locks.contains(terminal_id) {
                 rt.resize(
@@ -341,7 +389,7 @@ pub(super) fn resize_tab_panes(
     }
 
     for info in apply_pane_chrome(
-        tab.layout.panes(area),
+        tab.layout.panes_capped(area, &caps),
         app.pane_borders,
         app.pane_gaps,
         app.pane_outer_borders,
@@ -383,11 +431,13 @@ pub(super) fn compute_pane_infos_for_tab(
     };
 
     let multi_pane = tab.layout.pane_count() > 1;
+    let caps = readable_width_caps(app, tab, area.width);
 
     if tab.zoomed {
         let focused_id = tab.layout.focused();
         let borders = zoomed_pane_borders(app, multi_pane);
-        let pane_inner = pane_inner_rect(area, borders);
+        let pane_rect = crate::layout::shrink_to_desired(area, caps.get(&focused_id).copied());
+        let pane_inner = pane_inner_rect(pane_rect, borders);
         let mut inner_rect = pane_inner;
         let mut scrollbar_rect = None;
         if let Some(rt) = app.runtime_for_pane_in_workspace(terminal_runtimes, ws_idx, focused_id) {
@@ -408,7 +458,7 @@ pub(super) fn compute_pane_infos_for_tab(
         }
         return vec![PaneInfo {
             id: focused_id,
-            rect: area,
+            rect: pane_rect,
             inner_rect,
             scrollbar_rect,
             borders,
@@ -417,7 +467,7 @@ pub(super) fn compute_pane_infos_for_tab(
     }
 
     let mut pane_infos = apply_pane_chrome(
-        tab.layout.panes(area),
+        tab.layout.panes_capped(area, &caps),
         app.pane_borders,
         app.pane_gaps,
         app.pane_outer_borders,
@@ -1422,6 +1472,117 @@ mod tests {
         assert_geometry(40, false);
         app.workspaces[0].tabs[0].runtimes[&root_pane].test_process_pty_bytes(b"\x1b[?1049l");
         assert_geometry(39, true);
+    }
+
+    fn readable_width_app(columns: u16, max_percent: u16) -> AppState {
+        let mut app = AppState::test_new();
+        app.pane_scrollbars = false;
+        app.readable_width_columns = columns;
+        app.readable_width_max_percent = max_percent;
+        let mut workspace = Workspace::test_new("test");
+        let root_pane = workspace.tabs[0].root_pane;
+        workspace.tabs[0]
+            .panes
+            .get_mut(&root_pane)
+            .unwrap()
+            .readable_width = true;
+        app.workspaces = vec![workspace];
+        app.active = Some(0);
+        app
+    }
+
+    fn single_pane_geometry(app: &AppState, area: Rect) -> (Rect, Rect) {
+        let infos = compute_pane_infos(
+            app,
+            &TerminalRuntimeRegistry::new(),
+            area,
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+        (infos[0].rect, infos[0].inner_rect)
+    }
+
+    #[tokio::test]
+    async fn readable_width_single_pane_centers_and_caps_content_width() {
+        let mut app = readable_width_app(40, 100);
+
+        // Borderless single pane: the content itself is capped at 40 columns.
+        assert_eq!(
+            single_pane_geometry(&app, Rect::new(0, 0, 100, 20)),
+            (Rect::new(30, 0, 40, 20), Rect::new(30, 0, 40, 20))
+        );
+
+        // Bordered pane: the outer rect grows by the border so content stays 40.
+        app.pane_borders = crate::config::PaneBordersConfig::Always;
+        assert_eq!(
+            single_pane_geometry(&app, Rect::new(0, 0, 100, 20)),
+            (Rect::new(29, 0, 42, 20), Rect::new(30, 1, 40, 18))
+        );
+    }
+
+    #[tokio::test]
+    async fn readable_width_percent_cap_narrows_pane_on_wide_terminals() {
+        let mut app = readable_width_app(40, 30);
+        app.pane_borders = crate::config::PaneBordersConfig::Always;
+
+        // 30% of 100 columns beats the 42-column outer cap: outer width 30, centered.
+        assert_eq!(
+            single_pane_geometry(&app, Rect::new(0, 0, 100, 20)),
+            (Rect::new(35, 0, 30, 20), Rect::new(36, 1, 28, 18))
+        );
+
+        // On a narrower terminal the percentage cap falls below the floor, so
+        // panes never collapse below 20 content columns.
+        assert_eq!(
+            single_pane_geometry(&app, Rect::new(0, 0, 60, 20)),
+            (Rect::new(19, 0, 22, 20), Rect::new(20, 1, 20, 18))
+        );
+    }
+
+    #[tokio::test]
+    async fn readable_width_zoomed_pane_is_capped() {
+        let mut app = readable_width_app(40, 100);
+        let focused = app.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&focused)
+            .unwrap()
+            .readable_width = true;
+        app.workspaces[0].zoomed = true;
+
+        // Zoomed multi-pane keeps borders, so the outer rect is 42 wide.
+        assert_eq!(
+            single_pane_geometry(&app, Rect::new(0, 0, 100, 20)),
+            (Rect::new(29, 0, 42, 20), Rect::new(30, 1, 40, 18))
+        );
+    }
+
+    #[test]
+    fn readable_width_tab_surface_splits_match_capped_panes() {
+        let mut app = readable_width_app(30, 100);
+        app.pane_borders = crate::config::PaneBordersConfig::Off;
+        let right = app.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&right)
+            .unwrap()
+            .readable_width = true;
+        let surface = super::super::tab_surface::compute_tab_surface(
+            &app,
+            &TerminalRuntimeRegistry::new(),
+            Rect::new(0, 0, 100, 20),
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+
+        let rects: Vec<_> = surface.pane_infos.iter().map(|info| info.rect).collect();
+        assert_eq!(
+            rects,
+            vec![Rect::new(20, 0, 30, 20), Rect::new(50, 0, 30, 20)]
+        );
+        assert_eq!(surface.split_borders.len(), 1);
+        assert_eq!(surface.split_borders[0].pos, 50);
+        assert_eq!(surface.split_borders[0].area, Rect::new(20, 0, 60, 20));
     }
 
     #[tokio::test]

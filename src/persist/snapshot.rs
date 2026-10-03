@@ -8,6 +8,10 @@ use crate::layout::Node;
 use crate::terminal::TerminalRuntimeRegistry;
 use crate::workspace::Workspace;
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 /// Current snapshot format version.
 pub(super) const SNAPSHOT_VERSION: u32 = 3;
 
@@ -111,6 +115,8 @@ pub struct PaneSnapshot {
     pub agent_resume: Option<PaneAgentResumeSnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_argv: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub readable_width: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,6 +356,7 @@ fn capture_tab(
             })
             .unwrap_or_default();
         let launch_argv = terminal.and_then(|terminal| terminal.launch_argv.clone());
+        let readable_width = tab.panes.get(id).is_some_and(|pane| pane.readable_width);
         let agent_session = terminal.and_then(|terminal| {
             if let Some(authority) = terminal.hook_authority.as_ref() {
                 if let Some(session_ref) = authority.session_ref.as_ref() {
@@ -388,6 +395,7 @@ fn capture_tab(
                 agent_session,
                 agent_resume,
                 launch_argv,
+                readable_width,
             },
         );
     }
@@ -707,6 +715,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                readable_width: false,
             },
         );
         panes.insert(
@@ -719,6 +728,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                readable_width: false,
             },
         );
 
@@ -1373,6 +1383,23 @@ mod tests {
     }
 
     #[test]
+    fn capture_contract_preserves_readable_width_flag() {
+        let mut state = state_with_workspaces(&["one"]);
+        let root = state.workspaces[0].tabs[0].root_pane;
+        state.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&root)
+            .unwrap()
+            .readable_width = true;
+
+        let snapshot = capture_from_state(&state);
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let reloaded: SessionSnapshot = serde_json::from_str(&json).unwrap();
+
+        assert!(reloaded.workspaces[0].tabs[0].panes[&root.raw()].readable_width);
+    }
+
+    #[test]
     fn old_unversioned_snapshot_loads_as_version_0() {
         let json = r#"{"workspaces":[],"active":null,"selected":0}"#;
         let snap = parse_snapshot(json).unwrap();
@@ -1405,6 +1432,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                readable_width: false,
             },
         );
         panes.insert(
@@ -1419,6 +1447,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                readable_width: false,
             },
         );
 

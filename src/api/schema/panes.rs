@@ -142,6 +142,30 @@ pub enum PaneZoomMode {
 
 crate::cli::projection::cli_params! {
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default)]
+    pub struct PaneReadableWidthParams => PaneReadableWidthProjection {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub pane_id: Option<String> => binding::target(true),
+        #[serde(default)]
+        pub mode: PaneReadableWidthMode => Field::new(PaneReadableWidthMode::Toggle)
+            .input(Input::flag("toggle", |slot, _| { *slot = PaneReadableWidthMode::Toggle; Ok(()) }).configure(|arg| arg.conflicts_with_all(["on", "off"])))
+            .input(Input::flag("on", |slot, _| { *slot = PaneReadableWidthMode::On; Ok(()) }).configure(|arg| arg.conflicts_with("off")))
+            .input(Input::flag("off", |slot, _| { *slot = PaneReadableWidthMode::Off; Ok(()) })),
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PaneReadableWidthMode {
+    #[default]
+    Toggle,
+    On,
+    Off,
+}
+
+crate::cli::projection::cli_params! {
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default)]
     pub struct PaneLayoutParams => PaneLayoutProjection {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub pane_id: Option<String> => binding::target(false),
@@ -629,6 +653,13 @@ pub struct PaneZoomResult {
     pub focused_pane_id: String,
     pub zoomed: bool,
     pub layout: PaneLayoutSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneReadableWidthResult {
+    pub changed: bool,
+    pub enabled: bool,
+    pub pane_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

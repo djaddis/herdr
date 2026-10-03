@@ -94,6 +94,7 @@ operations::define_operations! {
     PaneSwap(PaneSwapParams) => "pane.swap", true, true;
     PaneMove(PaneMoveParams) => "pane.move", true, false;
     PaneZoom(PaneZoomParams) => "pane.zoom", true, true;
+    PaneReadableWidth(PaneReadableWidthParams) => "pane.readable_width", true, true;
     PaneLayout(PaneLayoutParams) => "pane.layout", false, false;
     PaneProcessInfo(PaneProcessInfoParams) => "pane.process_info", false, false;
     LayoutExport(LayoutExportParams) => "layout.export", false, false;

@@ -202,7 +202,8 @@ fn metadata(matches: &ArgMatches) -> Result<Method, ParseError> {
 mod tests {
     use super::*;
     use crate::api::schema::{
-        OutputMatch, PaneRightClickTarget, PaneZoomMode, ReadFormat, ReadSource, SplitDirection,
+        OutputMatch, PaneReadableWidthMode, PaneRightClickTarget, PaneZoomMode, ReadFormat,
+        ReadSource, SplitDirection,
     };
 
     fn args(values: &[&str]) -> Vec<String> {
@@ -304,6 +305,13 @@ mod tests {
                 "cli:pane:zoom",
                 "pane.zoom",
                 json!({"mode": "toggle"}),
+            ),
+            (
+                "readable-width",
+                vec!["pane", "--on"],
+                "cli:pane:readable_width",
+                "pane.readable_width",
+                json!({"pane_id": "pane", "mode": "on"}),
             ),
             (
                 "read",
@@ -427,7 +435,7 @@ mod tests {
     fn pane_projection_dash_leading_targets_and_empty_values() {
         let params = parse_pane_split_args(&["-literal", "--direction", "right"], None);
         assert_eq!(params.target_pane_id.as_deref(), Some("-literal"));
-        for name in ["get", "close", "zoom"] {
+        for name in ["get", "close", "zoom", "readable-width"] {
             let json = serde_json::to_value(request(name, &["-literal"]).unwrap()).unwrap();
             assert_eq!(json["params"]["pane_id"], "-literal");
         }
@@ -789,6 +797,37 @@ mod tests {
             assert_eq!(params.mode, mode);
         }
         assert!(request("zoom", &["--on", "--off"]).is_err());
+    }
+
+    #[test]
+    fn parse_pane_readable_width_args_defaults_to_current_toggle() {
+        let Method::PaneReadableWidth(params) = request("readable-width", &[]).unwrap().method
+        else {
+            panic!()
+        };
+        assert_eq!(params.pane_id, None);
+        assert_eq!(params.mode, PaneReadableWidthMode::Toggle);
+        for (values, pane, mode) in [
+            (
+                vec!["issue-1", "--on"],
+                "issue-1",
+                PaneReadableWidthMode::On,
+            ),
+            (
+                vec!["--pane", "issue-2", "--off"],
+                "issue-2",
+                PaneReadableWidthMode::Off,
+            ),
+        ] {
+            let Method::PaneReadableWidth(params) =
+                request("readable-width", &values).unwrap().method
+            else {
+                panic!()
+            };
+            assert_eq!(params.pane_id.as_deref(), Some(pane));
+            assert_eq!(params.mode, mode);
+        }
+        assert!(request("readable-width", &["--on", "--off"]).is_err());
     }
 
     #[test]

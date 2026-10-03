@@ -1,6 +1,8 @@
 use ratatui::{layout::Rect, Frame};
 
-use super::panes::{compute_pane_infos_for_tab, render_panes, resize_tab_panes};
+use super::panes::{
+    compute_pane_infos_for_tab, readable_width_caps, render_panes, resize_tab_panes,
+};
 use crate::app::AppState;
 use crate::layout::{PaneInfo, SplitBorder};
 use crate::protocol::CursorState;
@@ -68,7 +70,8 @@ pub(crate) fn compute_tab_surface_for(
             if tab.zoomed {
                 Vec::new()
             } else {
-                tab.layout.splits(area)
+                tab.layout
+                    .splits_capped(area, &readable_width_caps(app, tab, area.width))
             }
         })
         .unwrap_or_default();

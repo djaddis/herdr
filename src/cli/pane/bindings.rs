@@ -571,6 +571,14 @@ pub(super) const LEAVES: &[Leaf] = &[
         PaneZoomProjection,
         PaneZoom
     ),
+    leaf!(
+        "readable-width",
+        "Toggle or set pane readable-width mode (centered, capped width)",
+        "cli:pane:readable_width",
+        Json,
+        PaneReadableWidthProjection,
+        PaneReadableWidth
+    ),
     Leaf {
         name: "read",
         about: "Read pane terminal output",
