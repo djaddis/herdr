@@ -43,6 +43,8 @@ pub struct Palette {
     pub active_row_bg: Color,
     /// Background for the Navigate-mode cursor row in the sidebar.
     pub selection_bg: Color,
+    /// Border color for unfocused panes. Reset falls back to `overlay0`.
+    pub pane_border_inactive: Color,
     /// Subtle surface background for selected/focused items.
     pub surface0: Color,
     /// Slightly lighter surface for hover/active states.
@@ -82,6 +84,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(30, 30, 46),
             selection_bg: Color::Rgb(49, 50, 68),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(49, 50, 68),
             surface1: Color::Rgb(69, 71, 90),
             surface_dim: Color::Rgb(30, 30, 46),
@@ -107,6 +110,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(230, 233, 239),
             selection_bg: Color::Rgb(189, 208, 245),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(204, 208, 218),
             surface1: Color::Rgb(188, 192, 204),
             surface_dim: Color::Rgb(230, 233, 239),
@@ -132,6 +136,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::DarkGray,
             selection_bg: Color::Reset,
+            pane_border_inactive: Color::Reset,
             surface0: Color::Reset,
             surface1: Color::DarkGray,
             surface_dim: Color::DarkGray,
@@ -157,6 +162,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(35, 38, 54),
             selection_bg: Color::Rgb(45, 54, 80),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(36, 40, 59),
             surface1: Color::Rgb(65, 72, 104),
             surface_dim: Color::Rgb(26, 27, 38),
@@ -182,6 +188,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(210, 211, 218),
             selection_bg: Color::Rgb(182, 202, 231),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(196, 200, 218),
             surface1: Color::Rgb(168, 174, 203),
             surface_dim: Color::Rgb(210, 211, 218),
@@ -207,6 +214,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(55, 60, 82),
             selection_bg: Color::Rgb(70, 63, 93),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(68, 71, 90),
             surface1: Color::Rgb(98, 114, 164),
             surface_dim: Color::Rgb(40, 42, 54),
@@ -232,6 +240,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(67, 76, 94),
             selection_bg: Color::Rgb(64, 80, 93),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(59, 66, 82),
             surface1: Color::Rgb(67, 76, 94),
             surface_dim: Color::Rgb(46, 52, 64),
@@ -257,6 +266,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(50, 49, 48),
             selection_bg: Color::Rgb(75, 63, 39),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(60, 56, 54),
             surface1: Color::Rgb(80, 73, 69),
             surface_dim: Color::Rgb(40, 40, 40),
@@ -282,6 +292,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(242, 229, 188),
             selection_bg: Color::Rgb(235, 219, 178),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(235, 219, 178),
             surface1: Color::Rgb(213, 196, 161),
             surface_dim: Color::Rgb(242, 229, 188),
@@ -307,6 +318,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(49, 54, 64),
             selection_bg: Color::Rgb(51, 70, 89),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(44, 49, 58),
             surface1: Color::Rgb(62, 68, 81),
             surface_dim: Color::Rgb(40, 44, 52),
@@ -332,6 +344,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(216, 219, 226),
             selection_bg: Color::Rgb(205, 219, 248),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(240, 240, 241),
             surface1: Color::Rgb(229, 229, 230),
             surface_dim: Color::Rgb(245, 245, 246),
@@ -357,6 +370,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(22, 75, 87),
             selection_bg: Color::Rgb(8, 62, 85),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(7, 54, 66),
             surface1: Color::Rgb(88, 110, 117),
             surface_dim: Color::Rgb(0, 43, 54),
@@ -382,6 +396,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(238, 232, 213),
             selection_bg: Color::Rgb(201, 220, 223),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(238, 232, 213),
             surface1: Color::Rgb(147, 161, 161),
             surface_dim: Color::Rgb(238, 232, 213),
@@ -407,6 +422,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(54, 54, 70),
             selection_bg: Color::Rgb(50, 56, 75),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(42, 42, 55),
             surface1: Color::Rgb(54, 54, 70),
             surface_dim: Color::Rgb(31, 31, 40),
@@ -432,6 +448,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(213, 206, 163),
             selection_bg: Color::Rgb(220, 213, 172),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(220, 213, 172),
             surface1: Color::Rgb(201, 203, 209),
             surface_dim: Color::Rgb(213, 206, 163),
@@ -457,6 +474,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(38, 35, 58),
             selection_bg: Color::Rgb(59, 52, 75),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(31, 29, 46),
             surface1: Color::Rgb(38, 35, 58),
             surface_dim: Color::Rgb(38, 35, 58),
@@ -482,6 +500,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(227, 217, 207),
             selection_bg: Color::Rgb(242, 233, 225),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(242, 233, 225),
             surface1: Color::Rgb(255, 250, 243),
             surface_dim: Color::Rgb(242, 233, 225),
@@ -507,6 +526,7 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(16, 16, 16),
             selection_bg: Color::Rgb(35, 35, 35),
+            pane_border_inactive: Color::Reset,
             surface0: Color::Rgb(35, 35, 35),
             surface1: Color::Rgb(40, 40, 40),
             surface_dim: Color::Rgb(16, 16, 16),
@@ -549,6 +569,15 @@ impl Palette {
         }
     }
 
+    /// Border color for unfocused panes: `pane_border_inactive` when set,
+    /// otherwise `overlay0`.
+    pub fn inactive_pane_border(&self) -> Color {
+        match self.pane_border_inactive {
+            Color::Reset => self.overlay0,
+            color => color,
+        }
+    }
+
     /// Apply custom color overrides on top of this palette.
     pub fn with_overrides(mut self, custom: &crate::config::CustomThemeColors) -> Self {
         use crate::config::parse_color;
@@ -566,6 +595,9 @@ impl Palette {
         }
         if let Some(c) = &custom.selection_bg {
             self.selection_bg = parse_color(c);
+        }
+        if let Some(c) = &custom.pane_border_inactive {
+            self.pane_border_inactive = parse_color(c);
         }
         if let Some(c) = &custom.surface0 {
             self.surface0 = parse_color(c);
@@ -628,6 +660,9 @@ impl Palette {
         }
         if let Some(c) = &custom.selection_bg {
             self.selection_bg = parse_color(c);
+        }
+        if let Some(c) = &custom.pane_border_inactive {
+            self.pane_border_inactive = parse_color(c);
         }
         if let Some(c) = &custom.surface0 {
             self.surface0 = parse_color(c);
@@ -831,6 +866,7 @@ pub struct AppState {
     pub next_agent_state_change_seq: u64,
     pub confirm_close: bool,
     pub pane_borders: crate::config::PaneBordersConfig,
+    pub pane_border_weight: crate::config::PaneBorderWeightConfig,
     pub pane_outer_borders: bool,
     pub pane_scrollbars: bool,
     pub pane_gaps: bool,
@@ -1073,6 +1109,7 @@ impl AppState {
             next_agent_state_change_seq: 0,
             confirm_close: true,
             pane_borders: crate::config::PaneBordersConfig::Auto,
+            pane_border_weight: crate::config::PaneBorderWeightConfig::Standard,
             pane_outer_borders: true,
             pane_scrollbars: true,
             pane_gaps: false,
