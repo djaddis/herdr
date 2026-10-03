@@ -185,6 +185,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # split_horizontal = "prefix+minus"
 # close_pane = "prefix+x"
 # zoom = "prefix+z"       # legacy alias: fullscreen
+# readable_width = "prefix+f"
 # resize_mode = "prefix+r"
 # resize_pane_left = ""   # optional, e.g. "ctrl+shift+alt+left" resizes without entering resize mode
 # resize_pane_down = ""   # optional, e.g. "ctrl+shift+alt+down"
@@ -306,6 +307,17 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 
 # Keep split panes visually separated instead of sharing divider borders.
 # pane_gaps = true
+
+# Terminal content width (columns) for panes in readable-width mode.
+# readable_width_columns = 120
+
+# Auto-enable readable-width mode when an agent TUI is detected in a pane.
+# readable_width_agents = true
+
+# Maximum readable-width pane width (including borders) as a percentage of the
+# terminal pane area width (10-100). The effective cap is the smaller of this
+# and readable_width_columns plus border/scrollbar overhead.
+# readable_width_max_percent = 100
 
 # Show detected/reported agent labels in split pane borders when no manual pane name is set.
 # show_agent_labels_on_pane_borders = false

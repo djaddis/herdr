@@ -2,11 +2,11 @@ use crate::api::schema::{
     Method, OutputMatch, PaneCurrentParams, PaneDirection, PaneEdgesParams,
     PaneFocusDirectionParams, PaneInputSetParams, PaneLayoutParams, PaneListParams,
     PaneMoveDestination, PaneMoveParams, PaneNeighborParams, PaneProcessInfoParams, PaneReadParams,
-    PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
-    PaneReportMetadataParams, PaneResizeParams, PaneRightClickTarget, PaneSendInputParams,
-    PaneSendKeysParams, PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneTarget,
-    PaneWaitForOutputParams, PaneZoomMode, PaneZoomParams, ReadFormat, ReadSource, Request,
-    SplitDirection,
+    PaneReadableWidthMode, PaneReadableWidthParams, PaneReleaseAgentParams, PaneRenameParams,
+    PaneReportAgentParams, PaneReportAgentSessionParams, PaneReportMetadataParams,
+    PaneResizeParams, PaneRightClickTarget, PaneSendInputParams, PaneSendKeysParams,
+    PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneTarget, PaneWaitForOutputParams,
+    PaneZoomMode, PaneZoomParams, ReadFormat, ReadSource, Request, SplitDirection,
 };
 
 pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
@@ -26,6 +26,7 @@ pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
         "focus" => pane_focus(&args[1..]),
         "resize" => pane_resize(&args[1..]),
         "zoom" => pane_zoom(&args[1..]),
+        "readable-width" => pane_readable_width(&args[1..]),
         "read" => pane_read(&args[1..]),
         "rename" => pane_rename(&args[1..]),
         "input" => pane_input(&args[1..]),
@@ -425,6 +426,29 @@ fn parse_pane_zoom_args(args: &[String]) -> Result<PaneZoomParams, String> {
     }
 
     Ok(PaneZoomParams { pane_id, mode })
+}
+
+fn pane_readable_width(args: &[String]) -> std::io::Result<i32> {
+    let params = match parse_pane_readable_width_args(args) {
+        Ok(params) => params,
+        Err(message) => {
+            eprintln!("{message}");
+            return Ok(2);
+        }
+    };
+
+    super::runtime::pane_readable_width(params)
+}
+
+/// Readable-width takes the same pane target and mode flags as `pane zoom`.
+fn parse_pane_readable_width_args(args: &[String]) -> Result<PaneReadableWidthParams, String> {
+    let PaneZoomParams { pane_id, mode } = parse_pane_zoom_args(args)?;
+    let mode = match mode {
+        PaneZoomMode::Toggle => PaneReadableWidthMode::Toggle,
+        PaneZoomMode::On => PaneReadableWidthMode::On,
+        PaneZoomMode::Off => PaneReadableWidthMode::Off,
+    };
+    Ok(PaneReadableWidthParams { pane_id, mode })
 }
 
 fn pane_rename(args: &[String]) -> std::io::Result<i32> {
@@ -1683,6 +1707,7 @@ fn print_pane_help() {
         "  herdr pane resize --direction left|right|up|down [--amount FLOAT] [--pane ID|--current]"
     );
     eprintln!("  herdr pane zoom [<pane_id>|--pane ID|--current] [--toggle|--on|--off]");
+    eprintln!("  herdr pane readable-width [<pane_id>|--pane ID|--current] [--toggle|--on|--off]");
     eprintln!("  herdr pane rename <pane_id> <label>|--clear");
     eprintln!("  herdr pane read <pane_id> [--source visible|recent|recent-unwrapped] [--lines N] [--format text|ansi] [--ansi]");
     eprintln!("  herdr pane input [<pane_id>|--pane ID|--current] --right-click herdr|pane");
@@ -1968,6 +1993,31 @@ mod tests {
         let err = parse_pane_zoom_args(&args(&["--on", "--off"])).unwrap_err();
 
         assert!(err.contains("provide only one"));
+    }
+
+    #[test]
+    fn parse_pane_readable_width_args_defaults_to_current_toggle() {
+        let params = parse_pane_readable_width_args(&args(&[])).unwrap();
+
+        assert_eq!(params.pane_id, None);
+        assert_eq!(params.mode, PaneReadableWidthMode::Toggle);
+    }
+
+    #[test]
+    fn parse_pane_readable_width_args_accepts_positional_pane_and_on() {
+        let params = parse_pane_readable_width_args(&args(&["issue-1", "--on"])).unwrap();
+
+        assert_eq!(params.pane_id, Some("issue-1".into()));
+        assert_eq!(params.mode, PaneReadableWidthMode::On);
+    }
+
+    #[test]
+    fn parse_pane_readable_width_args_accepts_pane_option_and_off() {
+        let params =
+            parse_pane_readable_width_args(&args(&["--pane", "issue-2", "--off"])).unwrap();
+
+        assert_eq!(params.pane_id, Some("issue-2".into()));
+        assert_eq!(params.mode, PaneReadableWidthMode::Off);
     }
 
     #[test]

@@ -848,9 +848,10 @@ impl ClientShellState {
         action: crate::input::KeybindAction,
     ) -> Option<crate::api::schema::Method> {
         use crate::api::schema::{
-            Method, PaneDirection, PaneFocusDirectionParams, PaneResizeParams, PaneSplitParams,
-            PaneSwapParams, PaneTarget, PaneZoomMode, PaneZoomParams, SplitDirection,
-            TabCreateParams, TabMoveParams, TabTarget, WorkspaceTarget,
+            Method, PaneDirection, PaneFocusDirectionParams, PaneReadableWidthMode,
+            PaneReadableWidthParams, PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget,
+            PaneZoomMode, PaneZoomParams, SplitDirection, TabCreateParams, TabMoveParams,
+            TabTarget, WorkspaceTarget,
         };
         use crate::input::KeybindAction;
 
@@ -1088,6 +1089,12 @@ impl ClientShellState {
                 pane_id: focused_pane,
                 mode: PaneZoomMode::Toggle,
             })),
+            KeybindAction::ToggleReadableWidth => {
+                Some(Method::PaneReadableWidth(PaneReadableWidthParams {
+                    pane_id: focused_pane,
+                    mode: PaneReadableWidthMode::Toggle,
+                }))
+            }
             KeybindAction::ClearPane => Some(Method::PaneClear(PaneTarget {
                 pane_id: focused_pane?,
             })),

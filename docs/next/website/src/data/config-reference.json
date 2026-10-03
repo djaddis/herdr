@@ -818,6 +818,12 @@
           "description": "Toggle zoom for the focused pane. The legacy key name `fullscreen` is accepted as an alias."
         },
         {
+          "key": "keys.readable_width",
+          "type": "keybinding",
+          "default": "\"prefix+f\"",
+          "description": "Toggle readable-width mode for the focused pane."
+        },
+        {
           "key": "keys.resize_mode",
           "type": "keybinding",
           "default": "\"prefix+r\"",
@@ -1014,6 +1020,24 @@
           "type": "boolean",
           "default": "true",
           "description": "Keep split panes visually separated instead of sharing divider borders."
+        },
+        {
+          "key": "ui.readable_width_columns",
+          "type": "integer",
+          "default": "120",
+          "description": "Terminal content width (columns) for panes in readable-width mode. Readable-width panes are centered and never narrower than 20 content columns."
+        },
+        {
+          "key": "ui.readable_width_agents",
+          "type": "boolean",
+          "default": "true",
+          "description": "Auto-enable readable-width mode when an agent TUI is detected in a pane, and revert it when the agent exits unless it was toggled manually."
+        },
+        {
+          "key": "ui.readable_width_max_percent",
+          "type": "integer",
+          "default": "100",
+          "description": "Maximum readable-width pane outer width as a percentage of the terminal pane area width (10-100). The effective cap is the smaller of this and readable_width_columns plus border/scrollbar overhead."
         },
         {
           "key": "ui.show_agent_labels_on_pane_borders",

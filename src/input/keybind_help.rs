@@ -163,6 +163,7 @@ pub(crate) fn keybind_help_groups(
                 entry(binding_label(&keybinds.clear_pane), "clear pane"),
                 entry(binding_label(&keybinds.copy_mode), "copy mode"),
                 entry(binding_label(&keybinds.zoom), "zoom pane"),
+                entry(binding_label(&keybinds.readable_width), "readable width"),
                 entry(binding_label(&keybinds.resize_mode), "resize mode"),
                 entry(
                     binding_label(&keybinds.resize_pane_left),

@@ -28,6 +28,7 @@ const CLIENT_SHELL_METHODS: &[&str] = &[
     "pane.input.set",
     "pane.link.activate",
     "pane.link.resolve",
+    "pane.readable_width",
     "pane.rename",
     "pane.resize",
     "pane.scroll",
@@ -296,6 +297,10 @@ mod tests {
         assert_eq!(
             actual.remove("pane.link.resolve").as_deref(),
             Some("f5e4a3e01453ae7b188f127ce951c12c20e0bebcc17cc364eeb6d1a01fd5bf81")
+        );
+        assert_eq!(
+            actual.remove("pane.readable_width").as_deref(),
+            Some("4ef5d3a338c1eed90aa37112ac54e6bd0dadd4924b1981f169f747312550f967")
         );
 
         assert_eq!(

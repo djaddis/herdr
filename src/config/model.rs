@@ -443,6 +443,8 @@ pub struct KeysConfig {
     /// Toggle zoom for the focused pane. Default: "prefix+z"
     #[serde(alias = "fullscreen")]
     pub zoom: BindingConfig,
+    /// Toggle readable-width mode for the focused pane. Default: "prefix+f"
+    pub readable_width: BindingConfig,
     /// Enter resize mode. Default: "prefix+r"
     pub resize_mode: BindingConfig,
     /// Resize the focused pane toward the left. Unset by default.
@@ -580,6 +582,8 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(alias = "fullscreen", skip_serializing_if = "Option::is_none")]
     zoom: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    readable_width: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     resize_mode: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     resize_pane_left: Option<BindingConfig>,
@@ -697,6 +701,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(split_horizontal);
         apply_field!(close_pane);
         apply_field!(zoom);
+        apply_field!(readable_width);
         apply_field!(resize_mode);
         apply_field!(resize_pane_left);
         apply_field!(resize_pane_down);
@@ -802,6 +807,7 @@ impl KeysConfig {
         copy_effective_action_field!(split_horizontal, keybinds.split_horizontal);
         copy_effective_action_field!(close_pane, keybinds.close_pane);
         copy_effective_action_field!(zoom, keybinds.zoom);
+        copy_effective_action_field!(readable_width, keybinds.readable_width);
         copy_effective_action_field!(resize_mode, keybinds.resize_mode);
         copy_effective_action_field!(resize_pane_left, keybinds.resize_pane_left);
         copy_effective_action_field!(resize_pane_down, keybinds.resize_pane_down);
@@ -990,6 +996,12 @@ pub struct UiConfig {
     pub pane_border_weight: PaneBorderWeightConfig,
     /// Keep split panes visually separated instead of sharing divider borders. Default: true.
     pub pane_gaps: bool,
+    /// Terminal content width (columns) for panes in readable-width mode. Default: 120.
+    pub readable_width_columns: u16,
+    /// Auto-enable readable-width mode when an agent TUI is detected in a pane. Default: true.
+    pub readable_width_agents: bool,
+    /// Maximum readable-width pane outer width as a percentage of the terminal pane area width (10-100). Default: 100 (no percentage cap).
+    pub readable_width_max_percent: u16,
     /// Show agent labels in split pane borders when no manual pane label is set. Default: false.
     pub show_agent_labels_on_pane_borders: bool,
     /// Hide the tab row when the workspace has one tab. Default: false.
@@ -1183,6 +1195,7 @@ impl Default for KeysConfig {
             split_horizontal: BindingConfig::one("prefix+minus"),
             close_pane: BindingConfig::one("prefix+x"),
             zoom: BindingConfig::one("prefix+z"),
+            readable_width: BindingConfig::one("prefix+f"),
             resize_mode: BindingConfig::one("prefix+r"),
             resize_pane_left: BindingConfig::empty(),
             resize_pane_down: BindingConfig::empty(),
@@ -1227,6 +1240,9 @@ impl Default for UiConfig {
             pane_outer_borders: true,
             pane_scrollbars: true,
             pane_gaps: true,
+            readable_width_columns: 120,
+            readable_width_agents: true,
+            readable_width_max_percent: 100,
             show_agent_labels_on_pane_borders: false,
             hide_tab_bar_when_single_tab: false,
             tab_bar_position: TabBarPositionConfig::Top,
@@ -1540,6 +1556,9 @@ status_indicators = "symbols"
         assert!(default_config.ui.pane_outer_borders);
         assert!(default_config.ui.pane_scrollbars);
         assert!(default_config.ui.pane_gaps);
+        assert_eq!(default_config.ui.readable_width_columns, 120);
+        assert!(default_config.ui.readable_width_agents);
+        assert_eq!(default_config.ui.readable_width_max_percent, 100);
         assert!(!default_config.ui.show_agent_labels_on_pane_borders);
         assert!(!default_config.ui.hide_tab_bar_when_single_tab);
         assert_eq!(
@@ -1555,6 +1574,9 @@ pane_borders = "always"
 pane_outer_borders = false
 pane_scrollbars = false
 pane_gaps = true
+readable_width_columns = 104
+readable_width_agents = false
+readable_width_max_percent = 70
 show_agent_labels_on_pane_borders = true
 hide_tab_bar_when_single_tab = true
 tab_bar_position = "bottom"
@@ -1572,6 +1594,9 @@ tab_bar_right_separator = " · "
         assert!(!config.ui.pane_outer_borders);
         assert!(!config.ui.pane_scrollbars);
         assert!(config.ui.pane_gaps);
+        assert_eq!(config.ui.readable_width_columns, 104);
+        assert!(!config.ui.readable_width_agents);
+        assert_eq!(config.ui.readable_width_max_percent, 70);
         assert!(config.ui.show_agent_labels_on_pane_borders);
         assert!(config.ui.hide_tab_bar_when_single_tab);
         assert_eq!(config.ui.tab_bar_position, TabBarPositionConfig::Bottom);

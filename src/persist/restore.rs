@@ -763,6 +763,13 @@ fn restore_tab(
         }
     }
 
+    for (id, pane) in &mut panes {
+        pane.readable_width = reverse_id_map
+            .get(id)
+            .and_then(|old_id| snap.panes.get(old_id))
+            .is_some_and(|saved| saved.readable_width);
+    }
+
     if panes.is_empty() {
         warn!(
             tab = ?snap.custom_name,
@@ -1556,6 +1563,7 @@ mod tests {
                             }),
                             agent_resume: None,
                             launch_argv: None,
+                            readable_width: false,
                         },
                     )]),
                     zoomed: false,
@@ -1638,6 +1646,7 @@ mod tests {
                                 agent_session: None,
                                 agent_resume: None,
                                 launch_argv: None,
+                                readable_width: false,
                             },
                         ),
                         (
@@ -1650,6 +1659,7 @@ mod tests {
                                 agent_session: None,
                                 agent_resume: None,
                                 launch_argv: None,
+                                readable_width: true,
                             },
                         ),
                     ]),
@@ -1688,6 +1698,13 @@ mod tests {
         assert_eq!(workspace.next_public_pane_number, 4);
         assert_eq!(workspace.tabs[0].number, 5);
         assert_eq!(workspace.next_public_tab_number, 6);
+        for (pane_id, number) in &workspace.public_pane_numbers {
+            assert_eq!(
+                workspace.tabs[0].panes[pane_id].readable_width,
+                *number == 3,
+                "readable_width must follow the remapped pane"
+            );
+        }
     }
 
     #[tokio::test]
@@ -1704,6 +1721,7 @@ mod tests {
                     agent_session: None,
                     agent_resume: None,
                     launch_argv: None,
+                    readable_width: false,
                 },
             )
         };
@@ -1720,6 +1738,7 @@ mod tests {
             }),
             agent_resume: None,
             launch_argv: None,
+            readable_width: false,
         };
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
@@ -1872,6 +1891,7 @@ mod tests {
                             }),
                             agent_resume: None,
                             launch_argv: None,
+                            readable_width: false,
                         },
                     )]),
                     zoomed: false,
@@ -2178,6 +2198,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                readable_width: false,
             },
         );
         let mut history = SessionHistorySnapshot {

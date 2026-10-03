@@ -513,6 +513,15 @@ fn pane_command() -> Command {
                 .arg(flag("off")),
         )
         .subcommand(
+            Command::new("readable-width")
+                .about("Toggle or set pane readable-width mode (centered, capped width)")
+                .arg(Arg::new("pane_id").value_name("PANE_ID"))
+                .args(current_pane_args())
+                .arg(flag("toggle"))
+                .arg(flag("on"))
+                .arg(flag("off")),
+        )
+        .subcommand(
             Command::new("read")
                 .about("Read pane terminal output")
                 .arg(required("pane_id", "PANE_ID"))

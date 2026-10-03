@@ -8,15 +8,15 @@ use crate::api::schema::{
     PaneLayoutPane, PaneLayoutParams, PaneLayoutRect, PaneLayoutSnapshot, PaneLayoutSplit,
     PaneListParams, PaneMoveDestination, PaneMoveParams, PaneMoveReason, PaneMoveResult,
     PaneNeighborParams, PaneNeighborResult, PaneProcessInfo, PaneProcessInfoParams,
-    PaneProcessInfoProcess, PaneReadParams, PaneReadResult, PaneReleaseAgentParams,
-    PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
-    PaneReportMetadataParams, PaneResizeParams, PaneResizeReason, PaneResizeResult,
-    PaneScrollParams, PaneSelectionReadParams, PaneSendInputParams, PaneSendKeysParams,
-    PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneSwapReason, PaneSwapResult,
-    PaneTarget, PaneTextPoint, PaneTextRange, PaneZoomMode, PaneZoomParams, PaneZoomReason,
-    PaneZoomResult, ResponseResult,
+    PaneProcessInfoProcess, PaneReadParams, PaneReadResult, PaneReadableWidthMode,
+    PaneReadableWidthParams, PaneReadableWidthResult, PaneReleaseAgentParams, PaneRenameParams,
+    PaneReportAgentParams, PaneReportAgentSessionParams, PaneReportMetadataParams,
+    PaneResizeParams, PaneResizeReason, PaneResizeResult, PaneScrollParams,
+    PaneSelectionReadParams, PaneSendInputParams, PaneSendKeysParams, PaneSendTextParams,
+    PaneSplitParams, PaneSwapParams, PaneSwapReason, PaneSwapResult, PaneTarget, PaneTextPoint,
+    PaneTextRange, PaneZoomMode, PaneZoomParams, PaneZoomReason, PaneZoomResult, ResponseResult,
 };
-use crate::app::actions::{PaneZoomCommand, PaneZoomNoopReason};
+use crate::app::actions::{PaneReadableWidthCommand, PaneZoomCommand, PaneZoomNoopReason};
 use crate::app::App;
 #[cfg(test)]
 use crate::app::Mode;
@@ -627,9 +627,10 @@ impl App {
             return encode_error(id, "pane_layout_unavailable", "pane layout unavailable");
         };
         let area = self.state.view.terminal_area;
+        let caps = crate::ui::readable_width_caps(&self.state, tab, area.width);
         let Some(info) = tab
             .layout
-            .panes(area)
+            .panes_capped(area, &caps)
             .into_iter()
             .find(|info| info.id == pane_id)
         else {
@@ -1460,6 +1461,50 @@ impl App {
         )
     }
 
+    pub(super) fn handle_pane_readable_width(
+        &mut self,
+        id: String,
+        params: PaneReadableWidthParams,
+    ) -> String {
+        let Some((ws_idx, pane_id)) = self.resolve_optional_pane(params.pane_id.as_deref()) else {
+            return encode_error(id, "pane_not_found", "pane not found");
+        };
+        let Some(pane_public_id) = self.public_pane_id(ws_idx, pane_id) else {
+            return encode_error(id, "pane_not_found", "pane not found");
+        };
+        let command = match params.mode {
+            PaneReadableWidthMode::Toggle => PaneReadableWidthCommand::Toggle,
+            PaneReadableWidthMode::On => PaneReadableWidthCommand::On,
+            PaneReadableWidthMode::Off => PaneReadableWidthCommand::Off,
+        };
+        let Some(outcome) = self
+            .state
+            .apply_pane_readable_width(ws_idx, pane_id, command)
+        else {
+            return pane_not_found(id, &pane_public_id);
+        };
+        if outcome.changed {
+            self.schedule_session_save();
+            if let Some(layout) = self.state.workspaces[ws_idx]
+                .find_tab_index_for_pane(pane_id)
+                .and_then(|tab_idx| self.pane_layout_snapshot(ws_idx, tab_idx))
+            {
+                self.emit_layout_updated_snapshot(layout);
+            }
+        }
+
+        encode_success(
+            id,
+            ResponseResult::PaneReadableWidth {
+                readable_width: PaneReadableWidthResult {
+                    changed: outcome.changed,
+                    enabled: outcome.enabled,
+                    pane_id: pane_public_id,
+                },
+            },
+        )
+    }
+
     pub(super) fn handle_pane_input_set(
         &mut self,
         id: String,
@@ -2107,7 +2152,9 @@ impl App {
         direction: PaneDirection,
     ) -> Option<PaneId> {
         let tab = self.state.workspaces.get(ws_idx)?.tabs.get(tab_idx)?;
-        let panes = tab.layout.panes(self.state.view.terminal_area);
+        let area = self.state.view.terminal_area;
+        let caps = crate::ui::readable_width_caps(&self.state, tab, area.width);
+        let panes = tab.layout.panes_capped(area, &caps);
         let source = panes.iter().find(|pane| pane.id == source_pane_id)?;
         find_in_direction(source, direction.into(), &panes)
     }
@@ -2121,8 +2168,9 @@ impl App {
         let tab = ws.tabs.get(tab_idx)?;
         let area = self.state.view.terminal_area;
         let focused_pane_id = self.public_pane_id(ws_idx, tab.layout.focused())?;
+        let caps = crate::ui::readable_width_caps(&self.state, tab, area.width);
         let panes = crate::ui::apply_pane_chrome(
-            tab.layout.panes(area),
+            tab.layout.panes_capped(area, &caps),
             self.state.pane_borders,
             self.state.pane_gaps,
             self.state.pane_outer_borders,
@@ -2138,7 +2186,7 @@ impl App {
         .collect();
         let splits = tab
             .layout
-            .splits(area)
+            .splits_capped(area, &caps)
             .into_iter()
             .enumerate()
             .map(|(idx, split)| PaneLayoutSplit {
@@ -3861,6 +3909,57 @@ mod tests {
                 .map(|layout| layout.tab_id.as_str()),
             app.public_tab_id(0, 0).as_deref()
         );
+    }
+
+    #[test]
+    fn api_pane_readable_width_caps_reported_layout() {
+        let mut app = app_with_linked_worktree();
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.view.terminal_area = ratatui::layout::Rect::new(0, 0, 200, 40);
+        app.state.pane_borders = crate::config::PaneBordersConfig::Off;
+        app.state.pane_scrollbars = false;
+        app.state.readable_width_columns = 104;
+        app.state.readable_width_max_percent = 70;
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        let root_public = app.public_pane_id(0, root).unwrap();
+
+        let response = app.handle_pane_readable_width(
+            "req".into(),
+            PaneReadableWidthParams {
+                pane_id: Some(root_public.clone()),
+                mode: PaneReadableWidthMode::On,
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::PaneReadableWidth { readable_width } = success.result else {
+            panic!("expected pane readable_width response");
+        };
+        assert!(readable_width.changed);
+        assert!(readable_width.enabled);
+        assert_eq!(readable_width.pane_id, root_public);
+        // The 104-column cap beats 70% of 200 (140): centered at x = 48.
+        let events = app.event_hub.events_after(0);
+        let EventData::LayoutUpdated { layout } = &events.last().expect("layout event").1.data
+        else {
+            panic!("expected layout.updated event");
+        };
+        assert_eq!(layout.panes[0].rect.x, 48);
+        assert_eq!(layout.panes[0].rect.width, 104);
+
+        let response = app.handle_pane_readable_width(
+            "req".into(),
+            PaneReadableWidthParams {
+                pane_id: Some(root_public),
+                mode: PaneReadableWidthMode::On,
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::PaneReadableWidth { readable_width } = success.result else {
+            panic!("expected pane readable_width response");
+        };
+        assert!(!readable_width.changed);
+        assert!(readable_width.enabled);
     }
 
     #[test]

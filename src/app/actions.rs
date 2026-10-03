@@ -736,6 +736,19 @@ pub(crate) struct PaneZoomOutcome {
     pub zoomed: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PaneReadableWidthCommand {
+    Toggle,
+    On,
+    Off,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PaneReadableWidthOutcome {
+    pub changed: bool,
+    pub enabled: bool,
+}
+
 impl AppState {
     #[cfg(test)]
     pub fn navigate_pane(&mut self, direction: NavDirection) {
@@ -880,6 +893,50 @@ impl AppState {
             return;
         };
         self.apply_pane_zoom(ws_idx, pane_id, PaneZoomCommand::Toggle);
+    }
+
+    /// Set, clear, or toggle readable-width mode for a pane; manual changes
+    /// clear the agent auto-enable marker so agent exit no longer reverts them.
+    pub(crate) fn apply_pane_readable_width(
+        &mut self,
+        ws_idx: usize,
+        pane_id: PaneId,
+        command: PaneReadableWidthCommand,
+    ) -> Option<PaneReadableWidthOutcome> {
+        let pane = self.workspaces.get_mut(ws_idx)?.pane_state_mut(pane_id)?;
+        let desired = match command {
+            PaneReadableWidthCommand::Toggle => !pane.readable_width,
+            PaneReadableWidthCommand::On => true,
+            PaneReadableWidthCommand::Off => false,
+        };
+        if pane.readable_width == desired {
+            return Some(PaneReadableWidthOutcome {
+                changed: false,
+                enabled: desired,
+            });
+        }
+        pane.readable_width = desired;
+        pane.readable_width_auto = false;
+        self.mark_session_dirty();
+        Some(PaneReadableWidthOutcome {
+            changed: true,
+            enabled: desired,
+        })
+    }
+
+    #[cfg(test)]
+    pub fn toggle_readable_width(&mut self) {
+        let Some(ws_idx) = self.active else {
+            return;
+        };
+        let Some(pane_id) = self
+            .workspaces
+            .get(ws_idx)
+            .and_then(crate::workspace::Workspace::focused_pane_id)
+        else {
+            return;
+        };
+        self.apply_pane_readable_width(ws_idx, pane_id, PaneReadableWidthCommand::Toggle);
     }
 
     pub(crate) fn workspace_close_indices(&self, ws_idx: usize) -> Vec<usize> {
@@ -1831,6 +1888,27 @@ impl AppState {
             pane.seen = suppress_active_tab_notifications;
         }
         let seen = pane.seen;
+
+        let mut readable_width_changed = false;
+        if self.readable_width_agents {
+            if change.previous_known_agent.is_none() && change.known_agent.is_some() {
+                if !pane.readable_width {
+                    pane.readable_width = true;
+                    pane.readable_width_auto = true;
+                    readable_width_changed = true;
+                }
+            } else if change.previous_known_agent.is_some()
+                && change.known_agent.is_none()
+                && pane.readable_width_auto
+            {
+                pane.readable_width = false;
+                pane.readable_width_auto = false;
+                readable_width_changed = true;
+            }
+        }
+        if readable_width_changed {
+            self.mark_session_dirty();
+        }
 
         if !suppress_completion {
             if let Some(delivery) =
@@ -2967,6 +3045,74 @@ mod tests {
         let terminal = state.terminals.get(&terminal_id).unwrap();
         assert_eq!(terminal.state, AgentState::Working);
         assert_eq!(terminal.detected_agent, Some(Agent::Pi));
+    }
+
+    fn report_agent(state: &mut AppState, pane_id: PaneId, agent: Option<Agent>) {
+        let exited = agent.is_none();
+        state.handle_app_event(AppEvent::StateChanged {
+            pane_id,
+            agent,
+            state: if exited {
+                AgentState::Idle
+            } else {
+                AgentState::Working
+            },
+            visible_blocker: false,
+            visible_working: false,
+            process_exited: exited,
+            observed_at: std::time::Instant::now(),
+        });
+    }
+
+    #[test]
+    fn detected_agent_auto_enables_and_reverts_readable_width() {
+        let mut state = app_with_workspaces(&["test"]);
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+        let pane = state.workspaces[0].panes.get(&pane_id).unwrap();
+        assert!(pane.readable_width);
+        assert!(pane.readable_width_auto);
+
+        report_agent(&mut state, pane_id, None);
+        let pane = state.workspaces[0].panes.get(&pane_id).unwrap();
+        assert!(!pane.readable_width);
+        assert!(!pane.readable_width_auto);
+    }
+
+    #[test]
+    fn manual_readable_width_survives_agent_exit() {
+        let mut state = app_with_workspaces(&["test"]);
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+        state.toggle_readable_width();
+
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+        report_agent(&mut state, pane_id, None);
+
+        let pane = state.workspaces[0].panes.get(&pane_id).unwrap();
+        assert!(pane.readable_width);
+        assert!(!pane.readable_width_auto);
+    }
+
+    #[test]
+    fn manual_toggle_off_after_auto_enable_is_not_reenabled_until_next_agent() {
+        let mut state = app_with_workspaces(&["test"]);
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+        state.toggle_readable_width();
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+        assert!(!state.workspaces[0].panes[&pane_id].readable_width);
+    }
+
+    #[test]
+    fn readable_width_agents_disabled_leaves_pane_alone() {
+        let mut state = app_with_workspaces(&["test"]);
+        state.readable_width_agents = false;
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+        assert!(!state.workspaces[0].panes[&pane_id].readable_width);
     }
 
     #[test]
