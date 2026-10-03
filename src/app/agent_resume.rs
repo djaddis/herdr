@@ -146,7 +146,13 @@ impl App {
         tab: &crate::workspace::Tab,
         terminal_area: Rect,
     ) -> Vec<crate::layout::PaneInfo> {
-        let caps = crate::ui::readable_width_caps(&self.state, tab, terminal_area.width);
+        let caps = crate::ui::readable_width_caps(
+            &self.state,
+            &self.terminal_runtimes,
+            ws_idx,
+            tab,
+            terminal_area,
+        );
         let mut pane_infos = derived_pending_agent_resume_pane_infos(
             tab,
             terminal_area,

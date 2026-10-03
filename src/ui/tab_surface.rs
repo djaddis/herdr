@@ -65,13 +65,18 @@ pub(crate) fn compute_tab_surface_for(
             .tabs
             .get(target.tab_index)
     });
+    let caps = target
+        .zip(tab)
+        .map(|(target, tab)| {
+            readable_width_caps(app, terminal_runtimes, target.workspace_index, tab, area)
+        })
+        .unwrap_or_default();
     let split_borders = tab
         .map(|tab| {
             if tab.zoomed {
                 Vec::new()
             } else {
-                tab.layout
-                    .splits_capped(area, &readable_width_caps(app, tab, area.width))
+                tab.layout.splits_capped(area, &caps)
             }
         })
         .unwrap_or_default();
@@ -84,6 +89,7 @@ pub(crate) fn compute_tab_surface_for(
             area,
             resize_panes,
             cell_size,
+            &caps,
         )
     });
 

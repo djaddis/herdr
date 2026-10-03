@@ -70,6 +70,7 @@ pub enum NavDirection {
 }
 
 /// A node in the BSP tree. Public for serialization.
+#[derive(Clone)]
 pub enum Node {
     Pane(PaneId),
     Split {
@@ -81,6 +82,7 @@ pub enum Node {
 }
 
 /// BSP tiling layout. Tracks a tree of splits and a focused pane.
+#[derive(Clone)]
 pub struct TileLayout {
     root: Node,
     focus: PaneId,
@@ -129,33 +131,26 @@ impl TileLayout {
 
     /// Compute pane rects honoring per-pane max outer widths (readable width).
     pub fn panes_capped(&self, area: Rect, caps: &HashMap<PaneId, u16>) -> Vec<PaneInfo> {
+        let widths = desired_widths(&self.root, caps);
         let mut result = Vec::new();
-        collect_panes(&self.root, area, self.focus, caps, &mut result);
+        collect_panes(&self.root, area, self.focus, &widths, 0, &mut result);
         result
     }
 
-    /// Compute pane rects as they will be after splitting `target`, without
-    /// changing the layout. Returns the rects and the new pane's index; the
-    /// new pane's entry carries `target`'s id.
-    pub fn panes_after_split(
+    /// The layout as it will be after splitting `target`, without changing
+    /// this layout. Returns the preview and the id standing in for the new pane.
+    pub fn split_preview(
         &self,
-        area: Rect,
-        caps: &HashMap<PaneId, u16>,
         target: PaneId,
         direction: Direction,
         ratio: f32,
-    ) -> Option<(Vec<PaneInfo>, usize)> {
-        let mut panes = self.panes_capped(area, caps);
-        let index = panes.iter().position(|info| info.id == target)?;
-        let (first, second) = split_rect(panes[index].rect, direction, valid_split_ratio(ratio));
-        panes[index].rect = first;
-        panes[index].inner_rect = first;
-        let mut new_pane = panes[index].clone();
-        new_pane.rect = second;
-        new_pane.inner_rect = second;
-        new_pane.is_focused = false;
-        panes.insert(index + 1, new_pane);
-        Some((panes, index + 1))
+    ) -> Option<(TileLayout, PaneId)> {
+        let mut preview = self.clone();
+        // Never allocated by `PaneId::alloc`, so it cannot collide with a real pane.
+        let new_id = PaneId(u32::MAX);
+        let node = find_pane_mut(&mut preview.root, target)?;
+        *node = split_node(target, direction, new_id, valid_split_ratio(ratio));
+        Some((preview, new_id))
     }
 
     /// Collect all split boundaries for mouse drag resize.
@@ -165,8 +160,9 @@ impl TileLayout {
 
     /// Collect split boundaries honoring per-pane max outer widths (readable width).
     pub fn splits_capped(&self, area: Rect, caps: &HashMap<PaneId, u16>) -> Vec<SplitBorder> {
+        let widths = desired_widths(&self.root, caps);
         let mut result = Vec::new();
-        collect_splits(&self.root, area, caps, &mut Vec::new(), &mut result);
+        collect_splits(&self.root, area, &widths, 0, &mut Vec::new(), &mut result);
         result
     }
 
@@ -514,10 +510,11 @@ fn collect_panes(
     node: &Node,
     area: Rect,
     focus: PaneId,
-    caps: &HashMap<PaneId, u16>,
+    widths: &[DesiredWidth],
+    index: usize,
     result: &mut Vec<PaneInfo>,
 ) {
-    let area = shrink_to_desired(area, desired_width(node, caps));
+    let area = shrink_to_desired(area, desired_at(widths, index));
     match node {
         Node::Pane(id) => {
             result.push(PaneInfo {
@@ -536,9 +533,16 @@ fn collect_panes(
             first,
             second,
         } => {
-            let (a, b) = split_rect_capped(area, *direction, *ratio, first, second, caps);
-            collect_panes(first, a, focus, caps, result);
-            collect_panes(second, b, focus, caps, result);
+            let (first_index, second_index) = child_indexes(widths, index);
+            let (a, b) = split_rect_capped(
+                area,
+                *direction,
+                *ratio,
+                desired_at(widths, first_index),
+                desired_at(widths, second_index),
+            );
+            collect_panes(first, a, focus, widths, first_index, result);
+            collect_panes(second, b, focus, widths, second_index, result);
         }
     }
 }
@@ -546,7 +550,8 @@ fn collect_panes(
 fn collect_splits(
     node: &Node,
     area: Rect,
-    caps: &HashMap<PaneId, u16>,
+    widths: &[DesiredWidth],
+    index: usize,
     path: &mut Vec<bool>,
     result: &mut Vec<SplitBorder>,
 ) {
@@ -557,8 +562,15 @@ fn collect_splits(
         second,
     } = node
     {
-        let area = shrink_to_desired(area, desired_width(node, caps));
-        let (a, b) = split_rect_capped(area, *direction, *ratio, first, second, caps);
+        let area = shrink_to_desired(area, desired_at(widths, index));
+        let (first_index, second_index) = child_indexes(widths, index);
+        let (a, b) = split_rect_capped(
+            area,
+            *direction,
+            *ratio,
+            desired_at(widths, first_index),
+            desired_at(widths, second_index),
+        );
         let pos = match direction {
             Direction::Horizontal => a.x + a.width,
             Direction::Vertical => a.y + a.height,
@@ -571,10 +583,10 @@ fn collect_splits(
             path: path.clone(),
         });
         path.push(false);
-        collect_splits(first, a, caps, path, result);
+        collect_splits(first, a, widths, first_index, path, result);
         path.pop();
         path.push(true);
-        collect_splits(second, b, caps, path, result);
+        collect_splits(second, b, widths, second_index, path, result);
         path.pop();
     }
 }
@@ -743,27 +755,61 @@ fn split_rect(area: Rect, direction: Direction, ratio: f32) -> (Rect, Rect) {
     }
 }
 
-/// Outer width a subtree wants when every pane in it is capped; `None` when
-/// any pane is uncapped (and may therefore take all available width).
-fn desired_width(node: &Node, caps: &HashMap<PaneId, u16>) -> Option<u16> {
-    if caps.is_empty() {
-        return None;
+/// Per-node outer width wanted by a subtree, in pre-order, with the subtree's
+/// node count so a parent can find its second child. Empty when nothing is capped.
+#[derive(Clone, Copy)]
+struct DesiredWidth {
+    width: Option<u16>,
+    len: usize,
+}
+
+/// Compute every subtree's desired width bottom-up in one walk. A subtree has
+/// a desired width only when every pane in it is capped.
+fn desired_widths(root: &Node, caps: &HashMap<PaneId, u16>) -> Vec<DesiredWidth> {
+    fn fill(node: &Node, caps: &HashMap<PaneId, u16>, out: &mut Vec<DesiredWidth>) -> usize {
+        let index = out.len();
+        out.push(DesiredWidth {
+            width: None,
+            len: 1,
+        });
+        let width = match node {
+            Node::Pane(id) => caps.get(id).copied(),
+            Node::Split {
+                direction,
+                first,
+                second,
+                ..
+            } => {
+                let first_index = fill(first, caps, out);
+                let second_index = fill(second, caps, out);
+                out[index].len = out.len() - index;
+                match (out[first_index].width, out[second_index].width, direction) {
+                    (Some(a), Some(b), Direction::Horizontal) => Some(a.saturating_add(b)),
+                    (Some(a), Some(b), Direction::Vertical) => Some(a.max(b)),
+                    _ => None,
+                }
+            }
+        };
+        out[index].width = width;
+        index
     }
-    match node {
-        Node::Pane(id) => caps.get(id).copied(),
-        Node::Split {
-            direction: Direction::Horizontal,
-            first,
-            second,
-            ..
-        } => Some(desired_width(first, caps)?.saturating_add(desired_width(second, caps)?)),
-        Node::Split {
-            direction: Direction::Vertical,
-            first,
-            second,
-            ..
-        } => Some(desired_width(first, caps)?.max(desired_width(second, caps)?)),
+
+    let mut out = Vec::new();
+    if !caps.is_empty() {
+        fill(root, caps, &mut out);
     }
+    out
+}
+
+fn desired_at(widths: &[DesiredWidth], index: usize) -> Option<u16> {
+    widths.get(index).and_then(|entry| entry.width)
+}
+
+/// Pre-order indexes of a split node's two children.
+fn child_indexes(widths: &[DesiredWidth], index: usize) -> (usize, usize) {
+    let first = index + 1;
+    let second = first + widths.get(first).map_or(0, |entry| entry.len);
+    (first, second)
 }
 
 /// Center `area` horizontally at `desired` width when it is narrower than `area`.
@@ -783,16 +829,15 @@ fn split_rect_capped(
     area: Rect,
     direction: Direction,
     ratio: f32,
-    first: &Node,
-    second: &Node,
-    caps: &HashMap<PaneId, u16>,
+    first_desired: Option<u16>,
+    second_desired: Option<u16>,
 ) -> (Rect, Rect) {
-    if direction == Direction::Vertical || caps.is_empty() {
+    if direction == Direction::Vertical {
         return split_rect(area, direction, ratio);
     }
 
     let ratio_first_w = ((area.width as f32) * ratio).round() as u16;
-    let (first_w, second_w) = match (desired_width(first, caps), desired_width(second, caps)) {
+    let (first_w, second_w) = match (first_desired, second_desired) {
         (Some(first_w), Some(second_w)) => {
             let desired = first_w.saturating_add(second_w);
             if desired == 0 || desired > area.width {
@@ -914,40 +959,61 @@ mod tests {
     }
 
     #[test]
-    fn panes_after_split_predicts_the_real_split_geometry() {
+    fn split_preview_predicts_the_real_split_geometry() {
         let area = Rect::new(3, 1, 121, 37);
         let (mut layout, root) = TileLayout::new();
         let right = layout.split_pane(root, Direction::Horizontal, 0.6).unwrap();
         let bottom_left = layout.split_pane(root, Direction::Vertical, 0.4).unwrap();
+        // A capped pane makes the prediction depend on the post-split tree.
+        let caps = HashMap::from([(root, 30)]);
         for (target, direction, ratio) in [
             (bottom_left, Direction::Horizontal, 0.5),
             (right, Direction::Vertical, 0.3),
             (root, Direction::Horizontal, f32::NAN),
         ] {
-            let (predicted, new_index) = layout
-                .panes_after_split(area, &HashMap::new(), target, direction, ratio)
-                .unwrap();
-            let new_id = layout.split_pane(target, direction, ratio).unwrap();
-            let actual: Vec<_> = layout
-                .panes(area)
+            let (preview, preview_id) = layout.split_preview(target, direction, ratio).unwrap();
+            let predicted: Vec<_> = preview
+                .panes_capped(area, &caps)
                 .into_iter()
                 .map(|info| info.rect)
                 .collect();
+            let new_index = preview.pane_ids().iter().position(|id| *id == preview_id);
+            let new_id = layout.split_pane(target, direction, ratio).unwrap();
+            let actual: Vec<_> = layout
+                .panes_capped(area, &caps)
+                .into_iter()
+                .map(|info| info.rect)
+                .collect();
+            assert_eq!(predicted, actual);
             assert_eq!(
-                predicted.iter().map(|info| info.rect).collect::<Vec<_>>(),
-                actual
+                new_index.map(|index| layout.pane_ids()[index]),
+                Some(new_id)
             );
-            assert_eq!(layout.pane_ids()[new_index], new_id);
         }
         assert!(layout
-            .panes_after_split(
-                area,
-                &HashMap::new(),
-                PaneId::alloc(),
-                Direction::Vertical,
-                0.5
-            )
+            .split_preview(PaneId::alloc(), Direction::Vertical, 0.5)
             .is_none());
+    }
+
+    #[test]
+    fn splitting_a_lone_capped_pane_gives_the_new_pane_the_rest() {
+        let (layout, root) = TileLayout::new();
+        let caps = HashMap::from([(root, 40)]);
+        let (preview, new_id) = layout
+            .split_preview(root, Direction::Horizontal, 0.5)
+            .unwrap();
+        let rects: Vec<_> = preview
+            .panes_capped(Rect::new(0, 0, 200, 40), &caps)
+            .into_iter()
+            .map(|info| (info.id, info.rect))
+            .collect();
+        assert_eq!(
+            rects,
+            vec![
+                (root, Rect::new(0, 0, 40, 40)),
+                (new_id, Rect::new(40, 0, 160, 40)),
+            ]
+        );
     }
 
     #[test]

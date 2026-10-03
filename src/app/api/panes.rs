@@ -627,7 +627,8 @@ impl App {
             return encode_error(id, "pane_layout_unavailable", "pane layout unavailable");
         };
         let area = self.state.view.terminal_area;
-        let caps = crate::ui::readable_width_caps(&self.state, tab, area.width);
+        let caps =
+            crate::ui::readable_width_caps(&self.state, &self.terminal_runtimes, ws_idx, tab, area);
         let Some(info) = tab
             .layout
             .panes_capped(area, &caps)
@@ -1461,6 +1462,31 @@ impl App {
         )
     }
 
+    /// Drain panes whose readable width changed outside a geometry-claiming
+    /// request and emit `layout.updated` once per affected tab. Returns true
+    /// when any tab's geometry changed, so the caller can resize it.
+    pub(crate) fn emit_readable_width_layout_updates(&mut self) -> bool {
+        let changed = std::mem::take(&mut self.state.readable_width_geometry_changed);
+        let mut tabs = Vec::new();
+        for pane_id in changed {
+            let target = self
+                .state
+                .workspaces
+                .iter()
+                .enumerate()
+                .find_map(|(ws, w)| w.find_tab_index_for_pane(pane_id).map(|tab| (ws, tab)));
+            if let Some(target) = target.filter(|target| !tabs.contains(target)) {
+                tabs.push(target);
+            }
+        }
+        for &(ws_idx, tab_idx) in &tabs {
+            if let Some(layout) = self.pane_layout_snapshot(ws_idx, tab_idx) {
+                self.emit_layout_updated_snapshot(layout);
+            }
+        }
+        !tabs.is_empty()
+    }
+
     pub(super) fn handle_pane_readable_width(
         &mut self,
         id: String,
@@ -2153,7 +2179,8 @@ impl App {
     ) -> Option<PaneId> {
         let tab = self.state.workspaces.get(ws_idx)?.tabs.get(tab_idx)?;
         let area = self.state.view.terminal_area;
-        let caps = crate::ui::readable_width_caps(&self.state, tab, area.width);
+        let caps =
+            crate::ui::readable_width_caps(&self.state, &self.terminal_runtimes, ws_idx, tab, area);
         let panes = tab.layout.panes_capped(area, &caps);
         let source = panes.iter().find(|pane| pane.id == source_pane_id)?;
         find_in_direction(source, direction.into(), &panes)
@@ -2168,7 +2195,8 @@ impl App {
         let tab = ws.tabs.get(tab_idx)?;
         let area = self.state.view.terminal_area;
         let focused_pane_id = self.public_pane_id(ws_idx, tab.layout.focused())?;
-        let caps = crate::ui::readable_width_caps(&self.state, tab, area.width);
+        let caps =
+            crate::ui::readable_width_caps(&self.state, &self.terminal_runtimes, ws_idx, tab, area);
         let panes = crate::ui::apply_pane_chrome(
             tab.layout.panes_capped(area, &caps),
             self.state.pane_borders,

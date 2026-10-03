@@ -2340,6 +2340,94 @@ async fn repeated_layout_action_reapplies_controller_geometry() {
     shutdown_test_runtimes(&mut server);
 }
 
+fn readable_width_geometry_server(client_id: u64) -> (HeadlessServer, crate::layout::PaneId) {
+    let mut server = test_headless_server();
+    let mut workspace = crate::workspace::Workspace::test_new("readable-width-geometry");
+    let pane = workspace.tabs[0].root_pane;
+    workspace.insert_test_runtime(
+        pane,
+        crate::terminal::TerminalRuntime::test_with_screen_bytes(80, 24, b""),
+    );
+    server.app.state.workspaces = vec![workspace];
+    server.app.state.ensure_test_terminals();
+    server.app.state.active = Some(0);
+    server.app.state.selected = 0;
+    server.app.state.mode = crate::app::Mode::Terminal;
+    server.app.state.pane_borders = crate::config::PaneBordersConfig::Off;
+    server.app.state.pane_scrollbars = false;
+    server.app.state.readable_width_columns = 40;
+    let (control, _) = connect_test_shell(&mut server, client_id, 100, 30);
+    let _ = control.recv().expect("snapshot");
+    (server, pane)
+}
+
+#[tokio::test]
+async fn readable_width_request_reapplies_controller_geometry() {
+    let (mut server, pane) = readable_width_geometry_server(91);
+    let pane_id = server.app.public_pane_id(0, pane).unwrap();
+    let cols = |server: &HeadlessServer| {
+        server.app.state.workspaces[0].test_runtimes[&pane]
+            .current_size()
+            .1
+    };
+    let full = cols(&server);
+
+    for (mode, expected) in [
+        (crate::api::schema::PaneReadableWidthMode::On, 40),
+        (crate::api::schema::PaneReadableWidthMode::Off, full),
+    ] {
+        let (respond_to, _response_rx) = std::sync::mpsc::channel();
+        assert!(server.handle_client_shell_api_request(
+            91,
+            crate::api::ApiRequestMessage {
+                request: crate::api::schema::Request {
+                    id: "readable-width".into(),
+                    method: crate::api::schema::Method::PaneReadableWidth(
+                        crate::api::schema::PaneReadableWidthParams {
+                            pane_id: Some(pane_id.clone()),
+                            mode,
+                        },
+                    ),
+                },
+                respond_to,
+                response_write_complete: None,
+            },
+        ));
+        assert_eq!(cols(&server), expected);
+    }
+    shutdown_test_runtimes(&mut server);
+}
+
+#[tokio::test]
+async fn agent_auto_readable_width_reapplies_controller_geometry() {
+    let (mut server, pane) = readable_width_geometry_server(92);
+    let cols = |server: &HeadlessServer| {
+        server.app.state.workspaces[0].test_runtimes[&pane]
+            .current_size()
+            .1
+    };
+    let full = cols(&server);
+
+    for (agent, expected) in [(Some(crate::detect::Agent::Pi), 40), (None, full)] {
+        server.handle_internal_event_with_forwarding(AppEvent::StateChanged {
+            pane_id: pane,
+            agent,
+            state: if agent.is_some() {
+                crate::detect::AgentState::Working
+            } else {
+                crate::detect::AgentState::Idle
+            },
+            visible_blocker: false,
+            visible_working: false,
+            process_exited: agent.is_none(),
+            observed_at: std::time::Instant::now(),
+        });
+        assert!(server.apply_readable_width_geometry_changes());
+        assert_eq!(cols(&server), expected);
+    }
+    shutdown_test_runtimes(&mut server);
+}
+
 #[tokio::test]
 async fn public_close_reapplies_controller_geometry() {
     let mut server = test_headless_server();

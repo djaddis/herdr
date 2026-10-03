@@ -510,6 +510,11 @@ impl HeadlessServer {
             }
 
             self.drain_client_config_reload_request();
+            if self.apply_readable_width_geometry_changes() {
+                needs_render = true;
+                needs_full_render = true;
+                needs_graphics_render = false;
+            }
             self.sync_immediate_pty_sources();
             self.stream_host_mouse_capture_mode();
             self.stream_direct_terminal_keyboard_mode();
@@ -836,7 +841,21 @@ impl HeadlessServer {
         self.server_config_diagnostic_without_keybindings =
             server_config_diagnostic_without_keybindings;
         self.sync_foreground_client_state();
+        // Width-setting changes queue readable panes; resize them right away.
+        self.apply_readable_width_geometry_changes();
         report
+    }
+
+    /// Emit `layout.updated` and reapply controller geometry for tabs whose
+    /// readable-width caps changed outside a geometry-claiming request.
+    fn apply_readable_width_geometry_changes(&mut self) -> bool {
+        if self.app.state.readable_width_geometry_changed.is_empty()
+            || !self.app.emit_readable_width_layout_updates()
+        {
+            return false;
+        }
+        self.reapply_controlled_shell_tab_geometry(false);
+        true
     }
 
     fn foreground_client_outer_focus(&self) -> Option<bool> {

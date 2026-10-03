@@ -117,6 +117,9 @@ pub struct PaneSnapshot {
     pub launch_argv: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub readable_width: bool,
+    /// Whether `readable_width` was enabled by agent detection and reverts on agent exit.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub readable_width_auto: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -356,7 +359,10 @@ fn capture_tab(
             })
             .unwrap_or_default();
         let launch_argv = terminal.and_then(|terminal| terminal.launch_argv.clone());
-        let readable_width = tab.panes.get(id).is_some_and(|pane| pane.readable_width);
+        let (readable_width, readable_width_auto) =
+            tab.panes.get(id).map_or((false, false), |pane| {
+                (pane.readable_width, pane.readable_width_auto)
+            });
         let agent_session = terminal.and_then(|terminal| {
             if let Some(authority) = terminal.hook_authority.as_ref() {
                 if let Some(session_ref) = authority.session_ref.as_ref() {
@@ -396,6 +402,7 @@ fn capture_tab(
                 agent_resume,
                 launch_argv,
                 readable_width,
+                readable_width_auto,
             },
         );
     }
@@ -716,6 +723,7 @@ mod tests {
                 agent_resume: None,
                 launch_argv: None,
                 readable_width: false,
+                readable_width_auto: false,
             },
         );
         panes.insert(
@@ -729,6 +737,7 @@ mod tests {
                 agent_resume: None,
                 launch_argv: None,
                 readable_width: false,
+                readable_width_auto: false,
             },
         );
 
@@ -1391,12 +1400,19 @@ mod tests {
             .get_mut(&root)
             .unwrap()
             .readable_width = true;
+        state.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&root)
+            .unwrap()
+            .readable_width_auto = true;
 
         let snapshot = capture_from_state(&state);
         let json = serde_json::to_string(&snapshot).unwrap();
         let reloaded: SessionSnapshot = serde_json::from_str(&json).unwrap();
 
-        assert!(reloaded.workspaces[0].tabs[0].panes[&root.raw()].readable_width);
+        let pane = &reloaded.workspaces[0].tabs[0].panes[&root.raw()];
+        assert!(pane.readable_width);
+        assert!(pane.readable_width_auto);
     }
 
     #[test]
@@ -1433,6 +1449,7 @@ mod tests {
                 agent_resume: None,
                 launch_argv: None,
                 readable_width: false,
+                readable_width_auto: false,
             },
         );
         panes.insert(
@@ -1448,6 +1465,7 @@ mod tests {
                 agent_resume: None,
                 launch_argv: None,
                 readable_width: false,
+                readable_width_auto: false,
             },
         );
 

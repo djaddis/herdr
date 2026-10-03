@@ -27,39 +27,88 @@ pub(crate) fn pane_is_scrolled_back(rt: &TerminalRuntime) -> bool {
 /// Minimum content columns a readable-width pane keeps under the percent cap.
 const READABLE_WIDTH_MIN_COLUMNS: u16 = 20;
 
-/// Max outer width per readable-width pane in `tab` when laid out in an area
-/// `area_width` columns wide. The cap is the smaller of
-/// `readable_width_columns` plus pane chrome and `readable_width_max_percent`
-/// of the area, floored at 20 content columns. Empty when no pane opts in.
+/// Max outer width per readable-width pane in `tab` (workspace `ws_idx`) when
+/// laid out in `area`. Each cap is the smaller of `readable_width_columns`
+/// plus that pane's actual chrome (borders, gap, scrollbar gutter) and
+/// `readable_width_max_percent` of the area, floored at 20 content columns.
+/// Empty when no pane opts in.
 pub(crate) fn readable_width_caps(
     app: &AppState,
+    terminal_runtimes: &TerminalRuntimeRegistry,
+    ws_idx: usize,
     tab: &crate::workspace::Tab,
-    area_width: u16,
+    area: Rect,
 ) -> HashMap<PaneId, u16> {
-    if !tab.panes.values().any(|pane| pane.readable_width) {
+    readable_width_caps_for(app, &tab.layout, &tab.panes, tab.zoomed, area, &|pane_id| {
+        app.pane_scrollbars
+            && app
+                .runtime_for_pane_in_workspace(terminal_runtimes, ws_idx, pane_id)
+                .is_none_or(|rt| !rt.alternate_screen_active())
+    })
+}
+
+/// Caps for an arbitrary `layout` whose pane flags live in `panes`; panes
+/// missing from `panes` are uncapped. `reserves_gutter` reports whether a
+/// pane's terminal keeps a scrollbar column.
+fn readable_width_caps_for(
+    app: &AppState,
+    layout: &crate::layout::TileLayout,
+    panes: &HashMap<PaneId, crate::pane::PaneState>,
+    zoomed: bool,
+    area: Rect,
+    reserves_gutter: &dyn Fn(PaneId) -> bool,
+) -> HashMap<PaneId, u16> {
+    let readable = |id: &PaneId| panes.get(id).is_some_and(|pane| pane.readable_width);
+    if !panes.values().any(|pane| pane.readable_width) {
         return HashMap::new();
     }
-    let multi_pane = tab.layout.pane_count() > 1;
-    let border_overhead = if app.pane_borders.shows_borders(multi_pane) {
-        2
-    } else {
-        0
-    };
-    let overhead = border_overhead + u16::from(app.pane_scrollbars);
-    let column_cap = app
-        .readable_width_columns
-        .max(READABLE_WIDTH_MIN_COLUMNS)
-        .saturating_add(overhead);
     let percent = app.readable_width_max_percent.clamp(10, 100);
-    let percent_cap = (u32::from(area_width) * u32::from(percent) / 100) as u16;
-    let cap = column_cap
-        .min(percent_cap)
-        .max(READABLE_WIDTH_MIN_COLUMNS.saturating_add(overhead));
-    tab.panes
-        .iter()
-        .filter(|(_, pane)| pane.readable_width)
-        .map(|(id, _)| (*id, cap))
-        .collect()
+    let percent_cap = (u32::from(area.width) * u32::from(percent) / 100) as u16;
+    let cap_for = |overhead: u16| {
+        app.readable_width_columns
+            .max(READABLE_WIDTH_MIN_COLUMNS)
+            .saturating_add(overhead)
+            .min(percent_cap)
+            .max(READABLE_WIDTH_MIN_COLUMNS.saturating_add(overhead))
+    };
+    let gutter = |id: PaneId| u16::from(reserves_gutter(id));
+
+    if zoomed {
+        let focused = layout.focused();
+        if !readable(&focused) {
+            return HashMap::new();
+        }
+        let borders = zoomed_pane_borders(app, layout.pane_count() > 1);
+        let border_cols = u16::from(borders.contains(Borders::LEFT))
+            + u16::from(borders.contains(Borders::RIGHT));
+        return HashMap::from([(focused, cap_for(border_cols + gutter(focused)))]);
+    }
+
+    // Chrome depends on the laid-out neighbors, so lay out once with content-only
+    // caps, measure each capped pane's real chrome, and size the final caps from it.
+    let estimate: HashMap<PaneId, u16> = layout
+        .pane_ids()
+        .into_iter()
+        .filter(readable)
+        .map(|id| (id, cap_for(gutter(id))))
+        .collect();
+    let laid_out = layout.panes_capped(area, &estimate);
+    let allotted: Vec<u16> = laid_out.iter().map(|info| info.rect.width).collect();
+    apply_pane_chrome(
+        laid_out,
+        app.pane_borders,
+        app.pane_gaps,
+        app.pane_outer_borders,
+    )
+    .into_iter()
+    .zip(allotted)
+    .filter(|(info, _)| estimate.contains_key(&info.id))
+    .map(|(info, allotted)| {
+        let content = pane_inner_rect(info.rect, info.borders).width;
+        let chrome = allotted.saturating_sub(content) + gutter(info.id);
+        (info.id, cap_for(chrome))
+    })
+    .collect()
 }
 
 fn pane_border_title(label: &str, pane_width: u16, _focused: bool) -> Option<String> {
@@ -138,11 +187,20 @@ pub(crate) fn new_pane_terminal_size(
         let ws = app.workspaces.get(ws_idx)?;
         ws.tabs.get(ws.find_tab_index_for_pane(pane)?)
     };
+    // New programs start on the primary screen, which reserves the gutter.
+    let primary_screen = |_| app.pane_scrollbars;
     let pane_inner = match placement {
         NewPanePlacement::Alone => alone(),
         NewPanePlacement::Existing { ws_idx, pane } => tab_for(ws_idx, pane)
             .and_then(|tab| {
-                let caps = readable_width_caps(app, tab, area.width);
+                let caps = readable_width_caps_for(
+                    app,
+                    &tab.layout,
+                    &tab.panes,
+                    tab.zoomed,
+                    area,
+                    &primary_screen,
+                );
                 if tab.zoomed && tab.layout.focused() == pane {
                     let multi_pane = tab.layout.pane_count() > 1;
                     let rect = crate::layout::shrink_to_desired(area, caps.get(&pane).copied());
@@ -161,11 +219,21 @@ pub(crate) fn new_pane_terminal_size(
             ratio,
         } => tab_for(ws_idx, target)
             .and_then(|tab| {
-                let caps = readable_width_caps(app, tab, area.width);
-                tab.layout
-                    .panes_after_split(area, &caps, target, direction, ratio)
+                // Size from the post-split tree: the new pane is uncapped and
+                // the chrome is the multi-pane chrome.
+                let (preview, new_id) = tab.layout.split_preview(target, direction, ratio)?;
+                let caps = readable_width_caps_for(
+                    app,
+                    &preview,
+                    &tab.panes,
+                    false,
+                    area,
+                    &primary_screen,
+                );
+                let panes = preview.panes_capped(area, &caps);
+                let index = panes.iter().position(|info| info.id == new_id)?;
+                Some(laid_out(panes, index))
             })
-            .map(|(panes, new_index)| laid_out(panes, new_index))
             .unwrap_or_else(alone),
     };
     new_terminal_size(app, pane_inner)
@@ -366,7 +434,7 @@ pub(super) fn resize_tab_panes(
     cell_size: crate::kitty_graphics::HostCellSize,
 ) {
     let multi_pane = tab.layout.pane_count() > 1;
-    let caps = readable_width_caps(app, tab, area.width);
+    let caps = readable_width_caps(app, terminal_runtimes, workspace_index, tab, area);
 
     if tab.zoomed {
         let focused_id = tab.layout.focused();
@@ -421,6 +489,7 @@ pub(super) fn compute_pane_infos_for_tab(
     area: Rect,
     resize_panes: bool,
     cell_size: crate::kitty_graphics::HostCellSize,
+    caps: &HashMap<PaneId, u16>,
 ) -> Vec<PaneInfo> {
     let Some(tab) = app
         .workspaces
@@ -431,7 +500,6 @@ pub(super) fn compute_pane_infos_for_tab(
     };
 
     let multi_pane = tab.layout.pane_count() > 1;
-    let caps = readable_width_caps(app, tab, area.width);
 
     if tab.zoomed {
         let focused_id = tab.layout.focused();
@@ -467,7 +535,7 @@ pub(super) fn compute_pane_infos_for_tab(
     }
 
     let mut pane_infos = apply_pane_chrome(
-        tab.layout.panes_capped(area, &caps),
+        tab.layout.panes_capped(area, caps),
         app.pane_borders,
         app.pane_gaps,
         app.pane_outer_borders,
@@ -520,6 +588,13 @@ fn compute_pane_infos(
     else {
         return Vec::new();
     };
+    let caps = readable_width_caps(
+        app,
+        terminal_runtimes,
+        workspace_index,
+        &app.workspaces[workspace_index].tabs[tab_index],
+        area,
+    );
     compute_pane_infos_for_tab(
         app,
         terminal_runtimes,
@@ -528,6 +603,7 @@ fn compute_pane_infos(
         area,
         resize_panes,
         cell_size,
+        &caps,
     )
 }
 
@@ -1537,6 +1613,43 @@ mod tests {
             single_pane_geometry(&app, Rect::new(0, 0, 60, 20)),
             (Rect::new(19, 0, 22, 20), Rect::new(20, 1, 20, 18))
         );
+    }
+
+    #[tokio::test]
+    async fn readable_width_cap_counts_only_drawn_borders() {
+        let mut app = readable_width_app(40, 100);
+        app.pane_borders = crate::config::PaneBordersConfig::Always;
+        app.pane_outer_borders = false;
+
+        // Outer borders are removed, so the 40 content columns need no extra.
+        assert_eq!(
+            single_pane_geometry(&app, Rect::new(0, 0, 100, 20)),
+            (Rect::new(30, 0, 40, 20), Rect::new(30, 0, 40, 20))
+        );
+    }
+
+    #[tokio::test]
+    async fn readable_width_floor_holds_for_gapped_borderless_pair() {
+        let mut app = readable_width_app(20, 10);
+        app.pane_borders = crate::config::PaneBordersConfig::Off;
+        app.pane_gaps = true;
+        let right = app.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&right)
+            .unwrap()
+            .readable_width = true;
+
+        let infos = compute_pane_infos(
+            &app,
+            &TerminalRuntimeRegistry::new(),
+            Rect::new(0, 0, 100, 20),
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+        let widths: Vec<_> = infos.iter().map(|info| info.inner_rect.width).collect();
+        // The left pane gives up a gap column, so its cap grows to keep 20 columns.
+        assert_eq!(widths, vec![20, 20]);
     }
 
     #[tokio::test]

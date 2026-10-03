@@ -895,6 +895,18 @@ impl AppState {
         self.apply_pane_zoom(ws_idx, pane_id, PaneZoomCommand::Toggle);
     }
 
+    /// Queue every readable-width pane for a geometry refresh (cap settings changed).
+    pub(crate) fn queue_readable_width_geometry_for_all_panes(&mut self) {
+        let panes = self
+            .workspaces
+            .iter()
+            .flat_map(|ws| ws.tabs.iter())
+            .flat_map(|tab| tab.panes.iter())
+            .filter(|(_, pane)| pane.readable_width)
+            .map(|(id, _)| *id);
+        self.readable_width_geometry_changed.extend(panes);
+    }
+
     /// Set, clear, or toggle readable-width mode for a pane; manual changes
     /// clear the agent auto-enable marker so agent exit no longer reverts them.
     pub(crate) fn apply_pane_readable_width(
@@ -909,14 +921,17 @@ impl AppState {
             PaneReadableWidthCommand::On => true,
             PaneReadableWidthCommand::Off => false,
         };
+        let was_auto = std::mem::take(&mut pane.readable_width_auto);
         if pane.readable_width == desired {
+            if was_auto {
+                self.mark_session_dirty();
+            }
             return Some(PaneReadableWidthOutcome {
                 changed: false,
                 enabled: desired,
             });
         }
         pane.readable_width = desired;
-        pane.readable_width_auto = false;
         self.mark_session_dirty();
         Some(PaneReadableWidthOutcome {
             changed: true,
@@ -1889,24 +1904,22 @@ impl AppState {
         }
         let seen = pane.seen;
 
+        // New auto-enables follow the setting; an existing automatic cap always
+        // reverts on agent release, even if the setting was turned off meanwhile.
+        let acquired = change.previous_known_agent.is_none() && change.known_agent.is_some();
+        let released = change.previous_known_agent.is_some() && change.known_agent.is_none();
         let mut readable_width_changed = false;
-        if self.readable_width_agents {
-            if change.previous_known_agent.is_none() && change.known_agent.is_some() {
-                if !pane.readable_width {
-                    pane.readable_width = true;
-                    pane.readable_width_auto = true;
-                    readable_width_changed = true;
-                }
-            } else if change.previous_known_agent.is_some()
-                && change.known_agent.is_none()
-                && pane.readable_width_auto
-            {
-                pane.readable_width = false;
-                pane.readable_width_auto = false;
-                readable_width_changed = true;
-            }
+        if acquired && self.readable_width_agents && !pane.readable_width {
+            pane.readable_width = true;
+            pane.readable_width_auto = true;
+            readable_width_changed = true;
+        } else if released && pane.readable_width_auto {
+            pane.readable_width = false;
+            pane.readable_width_auto = false;
+            readable_width_changed = true;
         }
         if readable_width_changed {
+            self.readable_width_geometry_changed.push(pane_id);
             self.mark_session_dirty();
         }
 
@@ -3113,6 +3126,52 @@ mod tests {
 
         report_agent(&mut state, pane_id, Some(Agent::Pi));
         assert!(!state.workspaces[0].panes[&pane_id].readable_width);
+    }
+
+    #[test]
+    fn explicit_on_takes_manual_ownership_of_auto_enabled_pane() {
+        let mut state = app_with_workspaces(&["test"]);
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+
+        let outcome = state
+            .apply_pane_readable_width(0, pane_id, PaneReadableWidthCommand::On)
+            .unwrap();
+        assert!(!outcome.changed);
+        report_agent(&mut state, pane_id, None);
+
+        assert!(state.workspaces[0].panes[&pane_id].readable_width);
+    }
+
+    #[test]
+    fn auto_cap_reverts_after_auto_enable_setting_is_disabled() {
+        let mut state = app_with_workspaces(&["test"]);
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+        state.readable_width_agents = false;
+
+        report_agent(&mut state, pane_id, None);
+
+        let pane = &state.workspaces[0].panes[&pane_id];
+        assert!(!pane.readable_width);
+        assert!(!pane.readable_width_auto);
+    }
+
+    #[test]
+    fn agent_driven_readable_width_changes_queue_geometry_refresh() {
+        let mut state = app_with_workspaces(&["test"]);
+        let pane_id = *state.workspaces[0].panes.keys().next().unwrap();
+
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+        assert_eq!(
+            std::mem::take(&mut state.readable_width_geometry_changed),
+            vec![pane_id]
+        );
+        // Another report from the same agent changes nothing.
+        report_agent(&mut state, pane_id, Some(Agent::Pi));
+        assert!(state.readable_width_geometry_changed.is_empty());
+        report_agent(&mut state, pane_id, None);
+        assert_eq!(state.readable_width_geometry_changed, vec![pane_id]);
     }
 
     #[test]

@@ -495,6 +495,7 @@ impl App {
             readable_width_columns: config.ui.readable_width_columns,
             readable_width_agents: config.ui.readable_width_agents,
             readable_width_max_percent: config.ui.readable_width_max_percent,
+            readable_width_geometry_changed: Vec::new(),
             show_agent_labels_on_pane_borders: config.ui.show_agent_labels_on_pane_borders,
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: String::new(),
@@ -845,9 +846,16 @@ impl App {
                 self.state.pane_outer_borders = config.ui.pane_outer_borders;
                 self.state.pane_scrollbars = config.ui.pane_scrollbars;
                 self.state.pane_gaps = config.ui.pane_gaps;
+                let readable_width_settings_changed = self.state.readable_width_columns
+                    != config.ui.readable_width_columns
+                    || self.state.readable_width_max_percent
+                        != config.ui.readable_width_max_percent;
                 self.state.readable_width_columns = config.ui.readable_width_columns;
                 self.state.readable_width_agents = config.ui.readable_width_agents;
                 self.state.readable_width_max_percent = config.ui.readable_width_max_percent;
+                if readable_width_settings_changed {
+                    self.state.queue_readable_width_geometry_for_all_panes();
+                }
                 self.state.show_agent_labels_on_pane_borders =
                     config.ui.show_agent_labels_on_pane_borders;
                 self.configure_tab_bar_status(
