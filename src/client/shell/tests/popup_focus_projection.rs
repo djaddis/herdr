@@ -925,8 +925,7 @@ fn edit_scrollback_binding_targets_the_focused_endpoint_pane() {
     ));
 }
 
-#[test]
-fn sidebar_scrollbars_use_proportional_shared_geometry_and_drag() {
+fn overflowing_sidebar_snapshot() -> ClientShellSnapshot {
     let mut projected = snapshot();
     for index in 2..=10 {
         let mut workspace = projected.workspaces[0].clone();
@@ -954,8 +953,13 @@ fn sidebar_scrollbars_use_proportional_shared_geometry_and_drag() {
             focused: false,
         });
     }
+    projected
+}
+
+#[test]
+fn sidebar_scrollbars_use_proportional_shared_geometry_and_drag() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    state.set_snapshot(Box::new(projected));
+    state.set_snapshot(Box::new(overflowing_sidebar_snapshot()));
     state.set_pane_surface(surface());
     state.compose(106, 20).expect("overflowing sidebars");
 
@@ -1002,6 +1006,45 @@ fn sidebar_scrollbars_use_proportional_shared_geometry_and_drag() {
             row: track.bottom().saturating_sub(1),
             modifiers: KeyModifiers::empty(),
         })]);
+    }
+}
+
+#[test]
+fn chrome_scrollbars_setting_controls_sidebar_scrollbars() {
+    let compose = |chrome_scrollbars: bool| {
+        let mut config = Config::default();
+        config.ui.chrome_scrollbars = chrome_scrollbars;
+        let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+        state.set_snapshot(Box::new(overflowing_sidebar_snapshot()));
+        state.set_pane_surface(surface());
+        let frame = state.compose(106, 20).expect("overflowing sidebars");
+        let buffer = frame.to_ratatui_buffer().expect("sidebar buffer");
+        (state, buffer)
+    };
+
+    let (shown, shown_buffer) = compose(true);
+    let tracks = [shown.hits.workspace_scrollbar, shown.hits.agent_scrollbar];
+    for track in tracks {
+        assert!(!track.is_empty());
+        // The sidebar toggle may cover the agent track's last row.
+        let drawn = (track.y..track.bottom())
+            .filter(|&y| shown_buffer[(track.x, y)].symbol() == "▕")
+            .count();
+        assert!(drawn + 1 >= usize::from(track.height), "{track:?}");
+    }
+
+    let (hidden, hidden_buffer) = compose(false);
+    assert!(hidden.hits.workspace_scrollbar.is_empty());
+    assert!(hidden.hits.agent_scrollbar.is_empty());
+    // Lists still overflow and scroll; only the bar and its gutter go away.
+    for metrics in [
+        hidden.hits.workspace_scroll_metrics,
+        hidden.hits.agent_scroll_metrics,
+    ] {
+        assert!(metrics.expect("list metrics").max_offset_from_bottom > 0);
+    }
+    for track in tracks {
+        assert!((track.y..track.bottom()).all(|y| hidden_buffer[(track.x, y)].symbol() != "▕"));
     }
 }
 

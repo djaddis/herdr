@@ -15,8 +15,9 @@ pub(crate) fn pane_scrollbar_rect(info: &PaneInfo) -> Option<Rect> {
 pub(crate) fn release_notes_scrollbar_rect(
     body: Rect,
     metrics: crate::pane::ScrollMetrics,
+    scrollbar: bool,
 ) -> Option<Rect> {
-    (should_show_scrollbar(metrics) && body.width > 1).then_some(Rect::new(
+    (scrollbar && should_show_scrollbar(metrics) && body.width > 1).then_some(Rect::new(
         body.x + body.width - 1,
         body.y,
         1,

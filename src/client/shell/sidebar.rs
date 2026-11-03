@@ -296,7 +296,8 @@ pub(crate) fn render_sidebar(
     *state.workspace_scroll = metrics
         .max_offset_from_bottom
         .saturating_sub(metrics.offset_from_bottom);
-    let show_scrollbar = metrics.max_offset_from_bottom > 0 && body.width > 1;
+    let show_scrollbar =
+        config.chrome_scrollbars && metrics.max_offset_from_bottom > 0 && body.width > 1;
     let content_width = body.width.saturating_sub(u16::from(show_scrollbar));
     let mut y = body.y;
     for (entry_position, entry) in entries.iter().enumerate().skip(*state.workspace_scroll) {

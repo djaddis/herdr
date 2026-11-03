@@ -140,8 +140,13 @@ impl ClientShellState {
             install_command,
             stack.content,
             &self.config.palette,
+            self.config.chrome_scrollbars,
         );
-        let track = crate::ui::release_notes_scrollbar_rect(stack.content, metrics);
+        let track = crate::ui::release_notes_scrollbar_rect(
+            stack.content,
+            metrics,
+            self.config.chrome_scrollbars,
+        );
         Some((close, track, metrics))
     }
 

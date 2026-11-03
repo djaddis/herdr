@@ -670,6 +670,7 @@ impl ClientShellState {
                     &self.active_endpoint_id,
                     &self.config.keybinds,
                     &self.config.palette,
+                    self.config.chrome_scrollbars,
                 )?;
                 occlusion.cover(rendered.area);
                 self.hits.overlay_primary = rendered.primary;

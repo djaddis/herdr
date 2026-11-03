@@ -151,6 +151,7 @@ impl ClientShellConfig {
             mouse_scroll_lines: config.ui.mouse_scroll_lines(),
             right_click_passthrough_modifiers: config.ui.right_click_passthrough_modifiers(),
             redraw_on_focus_gained: config.ui.redraw_on_focus_gained,
+            chrome_scrollbars: config.ui.chrome_scrollbars,
             switch_ascii_input_source_in_prefix: config
                 .experimental
                 .switch_ascii_input_source_in_prefix,
@@ -366,6 +367,7 @@ impl ClientShellConfig {
                 self.mouse_scroll_lines = ui.mouse_scroll_lines();
                 self.right_click_passthrough_modifiers = ui.right_click_passthrough_modifiers();
                 self.redraw_on_focus_gained = ui.redraw_on_focus_gained;
+                self.chrome_scrollbars = ui.chrome_scrollbars;
             }
         }
 
@@ -483,6 +485,7 @@ mod tests {
         next.ui.tab_bar_position = TabBarPositionConfig::Bottom;
         next.ui.agent_panel_sort = crate::config::AgentPanelSortConfig::Priority;
         next.ui.status_indicators = crate::config::StatusIndicatorStyle::Symbols;
+        next.ui.chrome_scrollbars = false;
         next.ui.sidebar.agents = toml::from_str("rows = [[{ token = 'machine', rules = [{ equals = 'Local', bold = true }] }]]\nrow_gap = 2").unwrap();
         next.keys.prefix = crate::config::BindingConfig::one("ctrl+a");
 
@@ -490,6 +493,7 @@ mod tests {
 
         assert!(diagnostics.is_empty());
         assert_eq!(shell.sidebar_width, 31);
+        assert!(!shell.chrome_scrollbars);
         assert_eq!(shell.tab_bar_position, TabBarPositionConfig::Bottom);
         assert_eq!(
             shell.agent_panel_sort,

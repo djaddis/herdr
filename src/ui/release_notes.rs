@@ -193,16 +193,18 @@ pub(crate) fn product_announcement_display_lines<'a>(
     release_notes_lines(announcement.body.as_str(), p)
 }
 
+/// `scrollbar` reserves the last column for a scrollbar when the text overflows.
 fn display_lines_scroll_metrics(
     lines: &[(usize, Line<'_>)],
     scroll: u16,
     body: Rect,
+    scrollbar: bool,
 ) -> crate::pane::ScrollMetrics {
     let viewport_rows = body.height.max(1) as usize;
     let rows_for_width = |width: u16| release_notes_wrapped_line_count(lines, width.max(1));
     let full_width = body.width.max(1);
     let initial_rows = rows_for_width(full_width);
-    let wrap_width = if initial_rows > viewport_rows && full_width > 1 {
+    let wrap_width = if scrollbar && initial_rows > viewport_rows && full_width > 1 {
         full_width.saturating_sub(1)
     } else {
         full_width
@@ -220,11 +222,13 @@ pub(crate) fn release_notes_scroll_metrics(
     install_command: &str,
     body: Rect,
     p: &Palette,
+    scrollbar: bool,
 ) -> crate::pane::ScrollMetrics {
     display_lines_scroll_metrics(
         &release_notes_display_lines(notes, install_command, p),
         notes.scroll,
         body,
+        scrollbar,
     )
 }
 
@@ -232,11 +236,13 @@ pub(crate) fn product_announcement_scroll_metrics(
     announcement: &ProductAnnouncementState,
     body: Rect,
     p: &Palette,
+    scrollbar: bool,
 ) -> crate::pane::ScrollMetrics {
     display_lines_scroll_metrics(
         &product_announcement_display_lines(announcement, p),
         announcement.scroll,
         body,
+        scrollbar,
     )
 }
 

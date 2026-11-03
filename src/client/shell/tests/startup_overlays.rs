@@ -981,8 +981,9 @@ fn coalesced_release_notes_open_and_mouse_uses_current_geometry() {
         "herdr update",
         stack.content,
         &state.config.palette,
+        true,
     );
-    let track = crate::ui::release_notes_scrollbar_rect(stack.content, metrics)
+    let track = crate::ui::release_notes_scrollbar_rect(stack.content, metrics, true)
         .expect("release notes track");
     let close = crate::ui::release_notes_close_button_rect(Rect::new(
         stack.header.x,

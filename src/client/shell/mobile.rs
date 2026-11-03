@@ -436,13 +436,15 @@ pub(super) fn render_mobile_switcher(
         return;
     }
 
+    // The left column is the scrollbar gutter unless chrome scrollbars are off.
+    let gutter = u16::from(config.chrome_scrollbars);
     let items = mobile_items(
         snapshot,
         endpoints,
         active_endpoint_id,
         config,
         selected_workspace_id,
-        viewport.width.saturating_sub(1),
+        viewport.width.saturating_sub(gutter),
     );
     let total_rows = items.iter().map(|item| item.lines.len()).sum::<usize>();
     let max_scroll = total_rows.saturating_sub(usize::from(viewport.height));
@@ -474,17 +476,17 @@ pub(super) fn render_mobile_switcher(
         *reveal_workspace = false;
     }
     hits.mobile_max_scroll = max_scroll;
-    let content = if viewport.width > 1 {
+    let content = if viewport.width > gutter {
         Rect::new(
-            viewport.x + 1,
+            viewport.x + gutter,
             viewport.y,
-            viewport.width - 1,
+            viewport.width - gutter,
             viewport.height,
         )
     } else {
         Rect::default()
     };
-    if max_scroll > 0 {
+    if config.chrome_scrollbars && max_scroll > 0 {
         render_left_scrollbar(buffer, viewport, total_rows, *scroll, palette);
     }
     if content.is_empty() {

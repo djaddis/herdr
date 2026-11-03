@@ -307,6 +307,12 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Set false to reclaim the scrollbar column and keep it out of terminal-native selections.
 # pane_scrollbars = true
 
+# Draw scrollbars in Herdr's own UI outside terminal panes: the sidebar spaces
+# list, agents panel, mobile switcher, and overlays such as the navigator and
+# keybind help. Set false to hide them and reclaim their column; wheel and
+# keyboard scrolling still work. Pane scrollbars follow pane_scrollbars.
+# chrome_scrollbars = true
+
 # Pane border line weight: "standard" (light box drawing) or "thick" (heavy).
 # pane_border_weight = "standard"
 

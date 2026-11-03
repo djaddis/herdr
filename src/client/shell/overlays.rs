@@ -41,6 +41,7 @@ pub(crate) fn render_client_overlay(
     active_endpoint_id: &ClientEndpointId,
     k: &LiveKeybindConfig,
     p: &Palette,
+    chrome_scrollbars: bool,
 ) -> Option<OverlayRender> {
     if !matches!(
         o,
@@ -57,15 +58,17 @@ pub(crate) fn render_client_overlay(
     }
     match o {
         ClientShellOverlay::Onboarding => render_onboarding_overlay(b, k, p),
-        ClientShellOverlay::ProductAnnouncement(v) => render_product_announcement_overlay(b, v, p),
+        ClientShellOverlay::ProductAnnouncement(v) => {
+            render_product_announcement_overlay(b, v, p, chrome_scrollbars)
+        }
         ClientShellOverlay::ReleaseNotes(v) => {
-            render_release_notes_overlay(b, v, &s.update_install_command, p)
+            render_release_notes_overlay(b, v, &s.update_install_command, p, chrome_scrollbars)
         }
         ClientShellOverlay::Rename(v) => render_rename_overlay(b, v, p),
         ClientShellOverlay::ConfirmClose(v) => render_confirm_close_overlay(b, v, p),
-        ClientShellOverlay::Help(v) => render_help_overlay(b, v, k, p),
+        ClientShellOverlay::Help(v) => render_help_overlay(b, v, k, p, chrome_scrollbars),
         ClientShellOverlay::Navigator(v) => {
-            render_navigator_overlay(b, v, endpoints, active_endpoint_id, p)
+            render_navigator_overlay(b, v, endpoints, active_endpoint_id, p, chrome_scrollbars)
         }
         ClientShellOverlay::Settings(v) => {
             settings_overlay::render_settings_overlay(b, v, s.integration_updates_available, p)
@@ -310,6 +313,7 @@ fn render_release_notes_overlay(
     notes: &crate::app::state::ReleaseNotesState,
     install_command: &str,
     p: &Palette,
+    chrome_scrollbars: bool,
 ) -> Option<OverlayRender> {
     let outer = popup(
         b.area,
@@ -379,10 +383,11 @@ fn render_release_notes_overlay(
 
     let body = stack.content;
     let lines = crate::ui::release_notes_display_lines(notes, install_command, p);
-    let metrics = crate::ui::release_notes_scroll_metrics(notes, install_command, body, p);
+    let metrics =
+        crate::ui::release_notes_scroll_metrics(notes, install_command, body, p, chrome_scrollbars);
     let max_scroll = metrics.max_offset_from_bottom;
     let scroll = usize::from(notes.scroll).min(max_scroll);
-    let track = crate::ui::release_notes_scrollbar_rect(body, metrics);
+    let track = crate::ui::release_notes_scrollbar_rect(body, metrics, chrome_scrollbars);
     let text_area = track
         .map(|_| Rect::new(body.x, body.y, body.width.saturating_sub(1), body.height))
         .unwrap_or(body);
@@ -425,6 +430,7 @@ fn render_product_announcement_overlay(
     b: &mut Buffer,
     announcement: &crate::app::state::ProductAnnouncementState,
     p: &Palette,
+    chrome_scrollbars: bool,
 ) -> Option<OverlayRender> {
     let outer = popup(
         b.area,
@@ -495,10 +501,11 @@ fn render_product_announcement_overlay(
 
     let body = stack.content;
     let lines = crate::ui::product_announcement_display_lines(announcement, p);
-    let metrics = crate::ui::product_announcement_scroll_metrics(announcement, body, p);
+    let metrics =
+        crate::ui::product_announcement_scroll_metrics(announcement, body, p, chrome_scrollbars);
     let max_scroll = metrics.max_offset_from_bottom;
     let scroll = usize::from(announcement.scroll).min(max_scroll);
-    let track = crate::ui::release_notes_scrollbar_rect(body, metrics);
+    let track = crate::ui::release_notes_scrollbar_rect(body, metrics, chrome_scrollbars);
     let text_area = track
         .map(|_| Rect::new(body.x, body.y, body.width.saturating_sub(1), body.height))
         .unwrap_or(body);
@@ -707,6 +714,7 @@ fn render_navigator_overlay(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     p: &Palette,
+    chrome_scrollbars: bool,
 ) -> Option<OverlayRender> {
     let a = b.area;
     let width = a.width.saturating_sub(4).min(116);
@@ -813,8 +821,12 @@ fn render_navigator_overlay(
         max_offset_from_bottom: max,
         viewport_rows: usize::from(body.height),
     };
-    let scrollbar =
-        (max > 0 && body.width > 1).then_some(Rect::new(body.right() - 1, body.y, 1, body.height));
+    let scrollbar = (chrome_scrollbars && max > 0 && body.width > 1).then_some(Rect::new(
+        body.right() - 1,
+        body.y,
+        1,
+        body.height,
+    ));
     let row_width = body.width.saturating_sub(u16::from(scrollbar.is_some()));
     let mut row_hits = Vec::new();
     if rows.is_empty() {
@@ -1119,6 +1131,7 @@ fn render_help_overlay(
     h: &ClientHelpOverlay,
     k: &LiveKeybindConfig,
     p: &Palette,
+    chrome_scrollbars: bool,
 ) -> Option<OverlayRender> {
     use ratatui::widgets::{Paragraph, Widget, Wrap};
 
@@ -1188,7 +1201,7 @@ fn render_help_overlay(
             .map(|(line_width, _)| line_width.max(&1).div_ceil(width))
             .sum::<usize>()
     };
-    let needs_scrollbar = wrapped_rows(body.width) > viewport_rows;
+    let needs_scrollbar = chrome_scrollbars && wrapped_rows(body.width) > viewport_rows;
     let text_area = if needs_scrollbar {
         Rect::new(body.x, body.y, body.width.saturating_sub(1), body.height)
     } else {

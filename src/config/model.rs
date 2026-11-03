@@ -991,6 +991,12 @@ pub struct UiConfig {
     pub pane_outer_borders: bool,
     /// Draw interactive scrollbars beside terminal panes. Default: true.
     pub pane_scrollbars: bool,
+    /// Draw scrollbars in Herdr's own UI outside terminal panes: the sidebar
+    /// spaces list, the agents panel, the mobile switcher, and overlays such
+    /// as the navigator, keybind help, and release notes. Disabling also
+    /// reclaims their gutter column; wheel and keyboard scrolling still work.
+    /// Pane scrollbars stay under pane_scrollbars. Default: true.
+    pub chrome_scrollbars: bool,
     /// Line weight for pane borders: standard (light box drawing) or thick
     /// (heavy box drawing). Default: standard.
     pub pane_border_weight: PaneBorderWeightConfig,
@@ -1242,6 +1248,7 @@ impl Default for UiConfig {
             pane_border_weight: PaneBorderWeightConfig::Standard,
             pane_outer_borders: true,
             pane_scrollbars: true,
+            chrome_scrollbars: true,
             pane_gaps: true,
             readable_width_columns: 120,
             readable_width_agents: true,
@@ -1560,6 +1567,7 @@ status_indicators = "symbols"
         assert_eq!(default_config.ui.pane_borders, PaneBordersConfig::Auto);
         assert!(default_config.ui.pane_outer_borders);
         assert!(default_config.ui.pane_scrollbars);
+        assert!(default_config.ui.chrome_scrollbars);
         assert!(default_config.ui.pane_gaps);
         assert_eq!(default_config.ui.readable_width_columns, 120);
         assert!(default_config.ui.readable_width_agents);
@@ -1578,6 +1586,7 @@ status_indicators = "symbols"
 pane_borders = "always"
 pane_outer_borders = false
 pane_scrollbars = false
+chrome_scrollbars = false
 pane_gaps = true
 readable_width_columns = 104
 readable_width_agents = false
@@ -1598,6 +1607,7 @@ tab_bar_right_separator = " · "
         assert_eq!(config.ui.pane_borders, PaneBordersConfig::Always);
         assert!(!config.ui.pane_outer_borders);
         assert!(!config.ui.pane_scrollbars);
+        assert!(!config.ui.chrome_scrollbars);
         assert!(config.ui.pane_gaps);
         assert_eq!(config.ui.readable_width_columns, 104);
         assert!(!config.ui.readable_width_agents);

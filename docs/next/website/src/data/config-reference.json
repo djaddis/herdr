@@ -1012,6 +1012,12 @@
           "description": "Draw interactive scrollbars beside terminal panes. Disable to reclaim the scrollbar column and keep it out of terminal-native selections."
         },
         {
+          "key": "ui.chrome_scrollbars",
+          "type": "boolean",
+          "default": "true",
+          "description": "Draw scrollbars in Herdr's own UI outside terminal panes: the sidebar spaces list, agents panel, mobile switcher, and overlays such as the navigator, keybind help, and release notes. Disable to hide them and reclaim their column; wheel and keyboard scrolling still work. Pane scrollbars follow ui.pane_scrollbars."
+        },
+        {
           "key": "ui.pane_border_weight",
           "type": "enum",
           "default": "\"standard\"",
