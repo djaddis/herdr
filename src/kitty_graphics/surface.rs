@@ -438,25 +438,50 @@ impl ClientState {
         }
         // Placements still waiting for their pixels are skipped on the host, so
         // deleting what they replace would blank those cells until the upload is
-        // ACKed. Keep showing every resident terminal placement they overlap; the
-        // ACK frame then deletes it and places the replacement in one frame.
+        // ACKed. Keep showing the resident terminal placements they overlap; the
+        // ACK frame then deletes them and places the replacement in one frame.
         let pending = next
             .placements
             .iter()
             .filter(|p| matches!(p.asset.source, SurfaceGraphicsSource::Terminal { .. }))
             .filter(|p| !resident(&p.asset))
             .collect::<Vec<_>>();
-        let carried = self
-            .display_scene
-            .placements
-            .iter()
-            .filter(|previous| {
-                pending.iter().any(|p| placements_overlap(previous, p))
-                    && resident(&previous.asset)
-                    && !next.placements.contains(previous)
-            })
-            .cloned()
-            .collect::<Vec<_>>();
+        let carried = if pending.is_empty() {
+            Vec::new()
+        } else {
+            // Host image ids follow the source and host placement ids follow the
+            // source and logical placement id, neither the revision nor the
+            // geometry. A carried placement must not share either with a current
+            // one, or it would re-upload old pixels or move the current placement.
+            let current_sources = next
+                .placements
+                .iter()
+                .map(|p| &p.asset.source)
+                .collect::<HashSet<_>>();
+            let current_assets = next
+                .placements
+                .iter()
+                .map(|p| &p.asset)
+                .collect::<HashSet<_>>();
+            let current_ids = next
+                .placements
+                .iter()
+                .map(|p| (&p.asset.source, p.logical_placement_id))
+                .collect::<HashSet<_>>();
+            self.display_scene
+                .placements
+                .iter()
+                .filter(|previous| {
+                    (!current_sources.contains(&previous.asset.source)
+                        || current_assets.contains(&previous.asset))
+                        && !current_ids
+                            .contains(&(&previous.asset.source, previous.logical_placement_id))
+                        && pending.iter().any(|p| placements_overlap(previous, p))
+                        && resident(&previous.asset)
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        };
         next.placements.extend(carried);
         let desired = next
             .placements
@@ -1526,83 +1551,90 @@ mod tests {
         assert!(!state.trust_direct_asset(&next.key, active));
     }
 
+    fn terminal_image(app_id: u32) -> SurfaceGraphicsAsset {
+        let target = SurfaceGraphicsTarget::Pane {
+            pane_id: "pane".into(),
+        };
+        let mut image = asset(
+            target.clone(),
+            u64::from(app_id),
+            vec![app_id as u8, 2, 3, 255],
+        );
+        image.key.source = SurfaceGraphicsSource::Terminal {
+            target,
+            image_id: app_id,
+        };
+        image
+    }
+
+    /// Herdr places a placeholder image one row run at a time.
+    fn terminal_rows(
+        image: &SurfaceGraphicsAsset,
+        ys: std::ops::Range<u16>,
+    ) -> Vec<SurfaceGraphicsPlacement> {
+        ys.map(|y| {
+            let mut placement = scene(image.clone(), 0, y).placements.remove(0);
+            placement.logical_placement_id = u32::from(y) + 1;
+            placement.cols = 4;
+            placement
+        })
+        .collect()
+    }
+
+    fn metadata_scene(placements: Vec<SurfaceGraphicsPlacement>) -> SurfaceGraphicsScene {
+        SurfaceGraphicsScene {
+            placements,
+            ..SurfaceGraphicsScene::default()
+        }
+    }
+
+    #[cfg(unix)]
+    /// The bank a terminal image's first native upload lands in.
+    fn first_native_id(state: &ClientState, image: &SurfaceGraphicsAsset) -> u32 {
+        native_host_image_id(state.scope(), &image.key) ^ NATIVE_SLOT_BIT
+    }
+
+    fn encode_main(state: &mut ClientState) -> String {
+        let cell = HostCellSize {
+            width_px: 8,
+            height_px: 16,
+        };
+        String::from_utf8(state.encode(Visibility::Main, (0, 0), None, cell, &Occlusion::default()))
+            .unwrap()
+    }
+
     #[cfg(unix)]
     #[test]
     fn replaced_terminal_rows_keep_old_image_until_replacement_is_resident() {
         let mut state = ClientState::default();
         state.set_scope("replace-rows");
-        let cell = HostCellSize {
-            width_px: 8,
-            height_px: 16,
-        };
-        let target = SurfaceGraphicsTarget::Pane {
-            pane_id: "pane".into(),
-        };
-        let image = |app_id: u32| {
-            let mut image = asset(
-                target.clone(),
-                u64::from(app_id),
-                vec![app_id as u8, 2, 3, 255],
-            );
-            image.key.source = SurfaceGraphicsSource::Terminal {
-                target: target.clone(),
-                image_id: app_id,
-            };
-            image
-        };
-        // Herdr places a placeholder image one row run at a time.
-        let rows = |image: &SurfaceGraphicsAsset, ys: std::ops::Range<u16>| {
-            ys.map(|y| {
-                let mut placement = scene(image.clone(), 0, y).placements.remove(0);
-                placement.logical_placement_id = u32::from(y) + 1;
-                placement.cols = 4;
-                placement
-            })
-            .collect::<Vec<_>>()
-        };
-        let metadata = |placements: Vec<SurfaceGraphicsPlacement>| SurfaceGraphicsScene {
-            placements,
-            ..SurfaceGraphicsScene::default()
-        };
-        let native_id = |state: &ClientState, image: &SurfaceGraphicsAsset| {
-            native_host_image_id(state.scope(), &image.key) ^ NATIVE_SLOT_BIT
-        };
-        let encode = |state: &mut ClientState| {
-            String::from_utf8(state.encode(
-                Visibility::Main,
-                (0, 0),
-                None,
-                cell,
-                &Occlusion::default(),
-            ))
-            .unwrap()
-        };
 
         // Two app images fill rows 0-1 and 2-3.
-        let (top, bottom) = (image(10), image(11));
-        let (top_id, bottom_id) = (native_id(&state, &top), native_id(&state, &bottom));
-        let mut shown = rows(&top, 0..2);
-        shown.extend(rows(&bottom, 2..4));
-        state.set_scene(metadata(shown));
-        encode(&mut state);
+        let (top, bottom) = (terminal_image(10), terminal_image(11));
+        let top_id = first_native_id(&state, &top);
+        let bottom_id = first_native_id(&state, &bottom);
+        let mut shown = terminal_rows(&top, 0..2);
+        shown.extend(terminal_rows(&bottom, 2..4));
+        state.set_scene(metadata_scene(shown));
+        encode_main(&mut state);
         assert!(state.trust_direct_asset(&top.key, top_id));
         assert!(state.trust_direct_asset(&bottom.key, bottom_id));
-        encode(&mut state);
+        encode_main(&mut state);
 
         // The app repaints rows 0-1 under a brand-new image id.
-        let band = image(12);
-        let band_id = native_id(&state, &band);
-        let mut repainted = rows(&band, 0..2);
-        repainted.extend(rows(&bottom, 2..4));
+        let band = terminal_image(12);
+        let band_id = first_native_id(&state, &band);
+        let mut repainted = terminal_rows(&band, 0..2);
+        repainted.extend(terminal_rows(&bottom, 2..4));
         for _ in 0..2 {
-            state.set_scene(metadata(repainted.clone()));
-            let pending = encode(&mut state);
+            state.set_scene(metadata_scene(repainted.clone()));
+            let pending = encode_main(&mut state);
             assert!(!pending.contains("a=d,"), "{pending:?}");
             assert!(pending.contains(&format!("a=p,i={top_id},")), "{pending:?}");
             assert!(!pending.contains(&format!("i={band_id},")), "{pending:?}");
         }
         assert!(state.trust_direct_asset(&band.key, band_id));
-        let swapped = encode(&mut state);
+        let swapped = encode_main(&mut state);
         let delete = swapped.find(&format!("a=d,d=I,i={top_id},")).unwrap();
         assert!(delete < swapped.find(&format!("a=p,i={band_id},")).unwrap());
         assert_eq!(state.host.images.len(), 2);
@@ -1611,14 +1643,14 @@ mod tests {
         // A scroll replaces the whole view: one new image arrives inline at once,
         // the other waits for its upload. Only rows under the waiting one keep
         // their old pixels; rows under the inline image switch immediately.
-        let (waiting, inline) = (image(13), image(14));
-        let waiting_id = native_id(&state, &waiting);
-        let mut scrolled = rows(&waiting, 0..3);
-        scrolled.extend(rows(&inline, 3..4));
-        let mut scroll = metadata(scrolled);
+        let (waiting, inline) = (terminal_image(13), terminal_image(14));
+        let waiting_id = first_native_id(&state, &waiting);
+        let mut scrolled = terminal_rows(&waiting, 0..3);
+        scrolled.extend(terminal_rows(&inline, 3..4));
+        let mut scroll = metadata_scene(scrolled);
         scroll.assets.push(inline.clone());
         state.set_scene(scroll);
-        let pending = encode(&mut state);
+        let pending = encode_main(&mut state);
         assert!(!pending.contains("a=d,d=I,"), "{pending:?}");
         assert!(
             pending.contains(&format!("a=p,i={band_id},")),
@@ -1647,7 +1679,7 @@ mod tests {
             vec![2]
         );
         assert!(state.trust_direct_asset(&waiting.key, waiting_id));
-        let swapped = encode(&mut state);
+        let swapped = encode_main(&mut state);
         let waiting_place = swapped.find(&format!("a=p,i={waiting_id},")).unwrap();
         for old in [band_id, bottom_id] {
             assert!(swapped.find(&format!("a=d,d=I,i={old},")).unwrap() < waiting_place);
@@ -1655,11 +1687,11 @@ mod tests {
         assert_eq!(state.host.images.len(), 2);
 
         // A pane that goes away mid-upload frees everything it carried.
-        let last = image(15);
-        state.set_scene(metadata(rows(&last, 0..4)));
-        assert!(!encode(&mut state).contains("a=d,d=I,"));
+        let last = terminal_image(15);
+        state.set_scene(metadata_scene(terminal_rows(&last, 0..4)));
+        assert!(!encode_main(&mut state).contains("a=d,d=I,"));
         state.set_scene(SurfaceGraphicsScene::default());
-        let cleared = encode(&mut state);
+        let cleared = encode_main(&mut state);
         assert!(
             cleared.contains(&format!("a=d,d=I,i={waiting_id},")),
             "{cleared:?}"
@@ -1667,6 +1699,89 @@ mod tests {
         assert!(state.host.images.is_empty());
         assert!(state.native_image_ids.is_empty());
         assert!(state.display_scene.placements.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn moved_placement_is_not_carried_back_to_its_old_cells() {
+        let mut state = ClientState::default();
+        state.set_scope("moved-placement");
+        // A real (non-placeholder) placement keeps its logical id when it moves.
+        let moving = terminal_image(20);
+        let moving_id = first_native_id(&state, &moving);
+        let at = |y: u16| {
+            let mut placement = terminal_rows(&moving, y..y + 1).remove(0);
+            placement.logical_placement_id = 5;
+            placement
+        };
+        state.set_scene(metadata_scene(vec![at(1)]));
+        encode_main(&mut state);
+        assert!(state.trust_direct_asset(&moving.key, moving_id));
+        encode_main(&mut state);
+
+        // It scrolls up a row while a new image waits at its old cells.
+        let waiting = terminal_image(21);
+        let mut scrolled = vec![at(0)];
+        scrolled.extend(terminal_rows(&waiting, 1..2));
+        state.set_scene(metadata_scene(scrolled));
+        let pending = encode_main(&mut state);
+        assert_eq!(
+            pending.matches(&format!("a=p,i={moving_id},")).count(),
+            1,
+            "{pending:?}"
+        );
+        assert!(
+            pending.contains(&format!("\u{1b}[1;1H\u{1b}_Ga=p,i={moving_id},")),
+            "{pending:?}"
+        );
+        assert_eq!(
+            state
+                .display_scene
+                .placements
+                .iter()
+                .filter(|p| p.asset == moving.key)
+                .map(|p| p.y)
+                .collect::<Vec<_>>(),
+            vec![0]
+        );
+    }
+
+    #[test]
+    fn carried_rows_never_reupload_an_older_inline_revision() {
+        let mut state = ClientState::default();
+        state.set_scope("inline-revision");
+        // Rows 0-2 show an inline image.
+        let old = terminal_image(30);
+        let mut first = metadata_scene(terminal_rows(&old, 0..3));
+        first.assets.push(old.clone());
+        state.set_scene(first);
+        let uploaded = encode_main(&mut state);
+        assert_eq!(uploaded.matches("a=t,").count(), 1, "{uploaded:?}");
+
+        // The app redraws the same image id inline on rows 0-1 while a new image
+        // waits for its native upload on row 2, over the old revision's row.
+        let mut newer = terminal_image(30);
+        newer.key.data_fingerprint += 1;
+        newer.data = vec![9, 9, 9, 255];
+        let waiting = terminal_image(31);
+        let mut mixed = terminal_rows(&newer, 0..2);
+        mixed.extend(terminal_rows(&waiting, 2..3));
+        let mut mixed = metadata_scene(mixed);
+        mixed.assets.push(newer.clone());
+        state.set_scene(mixed);
+        let pending = encode_main(&mut state);
+        assert_eq!(pending.matches("a=t,").count(), 1, "{pending:?}");
+        assert!(state
+            .display_scene
+            .placements
+            .iter()
+            .all(|p| p.asset != old.key));
+        assert!(!state.assets.contains_key(&old.key));
+        // Further refreshes while the upload waits leave the new pixels alone.
+        state.set_scene(metadata_scene(state.scene.placements.clone()));
+        let again = encode_main(&mut state);
+        assert!(!again.contains("a=t,"), "{again:?}");
+        assert!(!again.contains("a=d,d=I,"), "{again:?}");
     }
 
     #[test]
