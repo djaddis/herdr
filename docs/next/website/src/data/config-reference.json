@@ -1049,7 +1049,13 @@
           "key": "ui.readable_width_max_percent",
           "type": "integer",
           "default": "100",
-          "description": "Maximum readable-width pane outer width as a percentage of the terminal pane area width (10-100). The effective cap is the smaller of this and readable_width_columns plus border/scrollbar overhead."
+          "description": "Maximum readable-width pane outer width as a percentage of the terminal pane area width (10-100). It only narrows wide areas: the cap never goes below readable_width_min_columns, and the smaller of it and readable_width_columns plus border/scrollbar overhead applies."
+        },
+        {
+          "key": "ui.readable_width_min_columns",
+          "type": "integer",
+          "default": "80",
+          "description": "Content columns the readable_width_max_percent cap never goes below (values below 20 are clamped to 20). A pane area at or under this width, plus border/scrollbar overhead, gets no side bars."
         },
         {
           "key": "ui.show_agent_labels_on_pane_borders",

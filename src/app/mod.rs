@@ -546,6 +546,7 @@ impl App {
             readable_width_columns: config.ui.readable_width_columns,
             readable_width_agents: config.ui.readable_width_agents,
             readable_width_max_percent: config.ui.readable_width_max_percent,
+            readable_width_min_columns: config.ui.readable_width_min_columns,
             readable_width_geometry_changed: Vec::new(),
             show_agent_labels_on_pane_borders: config.ui.show_agent_labels_on_pane_borders,
             tab_bar_right: Vec::new(),
@@ -923,10 +924,13 @@ impl App {
                 let readable_width_settings_changed = self.state.readable_width_columns
                     != config.ui.readable_width_columns
                     || self.state.readable_width_max_percent
-                        != config.ui.readable_width_max_percent;
+                        != config.ui.readable_width_max_percent
+                    || self.state.readable_width_min_columns
+                        != config.ui.readable_width_min_columns;
                 self.state.readable_width_columns = config.ui.readable_width_columns;
                 self.state.readable_width_agents = config.ui.readable_width_agents;
                 self.state.readable_width_max_percent = config.ui.readable_width_max_percent;
+                self.state.readable_width_min_columns = config.ui.readable_width_min_columns;
                 if readable_width_settings_changed {
                     self.state.queue_readable_width_geometry_for_all_panes();
                 }

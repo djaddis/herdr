@@ -24,13 +24,16 @@ pub(crate) fn pane_is_scrolled_back(rt: &TerminalRuntime) -> bool {
         .is_some_and(|metrics| metrics.offset_from_bottom > 0)
 }
 
-/// Minimum content columns a readable-width pane keeps under the percent cap.
+/// Hard floor for readable-width content columns and for
+/// `readable_width_min_columns`.
 const READABLE_WIDTH_MIN_COLUMNS: u16 = 20;
 
 /// Max outer width per readable-width pane in `tab` (workspace `ws_idx`) when
-/// laid out in `area`. Each cap is the smaller of `readable_width_columns`
-/// plus that pane's actual chrome (borders, gap, scrollbar gutter) and
-/// `readable_width_max_percent` of the area, floored at 20 content columns.
+/// laid out in `area`. Each cap is `readable_width_columns` plus that pane's
+/// actual chrome (borders, gap, scrollbar gutter), limited by
+/// `readable_width_max_percent` of the area. The percent limit never drops
+/// below `readable_width_min_columns` of content, so it only narrows wide
+/// areas and a pane no wider than its cap keeps its full width.
 /// Empty when no pane opts in.
 pub(crate) fn readable_width_caps(
     app: &AppState,
@@ -64,12 +67,15 @@ fn readable_width_caps_for(
     }
     let percent = app.readable_width_max_percent.clamp(10, 100);
     let percent_cap = (u32::from(area.width) * u32::from(percent) / 100) as u16;
+    let min_columns = app
+        .readable_width_min_columns
+        .max(READABLE_WIDTH_MIN_COLUMNS);
     let cap_for = |overhead: u16| {
-        app.readable_width_columns
+        let columns_cap = app
+            .readable_width_columns
             .max(READABLE_WIDTH_MIN_COLUMNS)
-            .saturating_add(overhead)
-            .min(percent_cap)
-            .max(READABLE_WIDTH_MIN_COLUMNS.saturating_add(overhead))
+            .saturating_add(overhead);
+        columns_cap.min(percent_cap.max(min_columns.saturating_add(overhead)))
     };
     let gutter = |id: PaneId| u16::from(reserves_gutter(id));
 
@@ -1555,6 +1561,8 @@ mod tests {
         app.pane_scrollbars = false;
         app.readable_width_columns = columns;
         app.readable_width_max_percent = max_percent;
+        // Small fixtures use the hard floor so the percent cap stays visible.
+        app.readable_width_min_columns = 20;
         let mut workspace = Workspace::test_new("test");
         let root_pane = workspace.tabs[0].root_pane;
         workspace.tabs[0]
@@ -1607,12 +1615,41 @@ mod tests {
             (Rect::new(35, 0, 30, 20), Rect::new(36, 1, 28, 18))
         );
 
-        // On a narrower terminal the percentage cap falls below the floor, so
-        // panes never collapse below 20 content columns.
+        // On a narrower terminal the percentage cap falls below the
+        // readable_width_min_columns floor (20 here), which wins.
         assert_eq!(
             single_pane_geometry(&app, Rect::new(0, 0, 60, 20)),
             (Rect::new(19, 0, 22, 20), Rect::new(20, 1, 20, 18))
         );
+    }
+
+    #[tokio::test]
+    async fn readable_width_percent_cap_never_narrows_below_min_columns() {
+        let mut app = readable_width_app(104, 70);
+        app.readable_width_min_columns = 80;
+        let geometry =
+            |app: &AppState, width: u16| single_pane_geometry(app, Rect::new(0, 0, width, 20)).0;
+
+        // Narrow area: no wider than the 80-column floor, so no side bars.
+        assert_eq!(geometry(&app, 80), Rect::new(0, 0, 80, 20));
+        assert_eq!(geometry(&app, 60), Rect::new(0, 0, 60, 20));
+        // 70% of 110 is 77, below the floor: the floor wins.
+        assert_eq!(geometry(&app, 110), Rect::new(15, 0, 80, 20));
+        // 70% of 140 is 98, between the floor and 104 columns: percent wins.
+        assert_eq!(geometry(&app, 140), Rect::new(21, 0, 98, 20));
+        // 70% of 200 is 140, above 104 columns: the columns cap wins.
+        assert_eq!(geometry(&app, 200), Rect::new(48, 0, 104, 20));
+
+        // The floor counts content columns, so drawn borders add to it.
+        app.pane_borders = crate::config::PaneBordersConfig::Always;
+        assert_eq!(geometry(&app, 82), Rect::new(0, 0, 82, 20));
+        assert_eq!(geometry(&app, 110), Rect::new(14, 0, 82, 20));
+
+        // Zero is not a usable floor; it clamps to the 20-column hard floor.
+        app.pane_borders = crate::config::PaneBordersConfig::Auto;
+        app.readable_width_min_columns = 0;
+        app.readable_width_max_percent = 10;
+        assert_eq!(geometry(&app, 100), Rect::new(40, 0, 20, 20));
     }
 
     #[tokio::test]

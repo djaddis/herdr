@@ -1006,8 +1006,12 @@ pub struct UiConfig {
     pub readable_width_columns: u16,
     /// Auto-enable readable-width mode when an agent TUI is detected in a pane. Default: true.
     pub readable_width_agents: bool,
-    /// Maximum readable-width pane outer width as a percentage of the terminal pane area width (10-100). Default: 100 (no percentage cap).
+    /// Maximum readable-width pane outer width as a percentage of the terminal pane area width (10-100). Only narrows wide areas: never below readable_width_min_columns. Default: 100 (no percentage cap).
     pub readable_width_max_percent: u16,
+    /// Content columns the readable_width_max_percent cap never goes below, so
+    /// areas at or under this width get no side bars. Values below 20 are
+    /// clamped to 20. Default: 80.
+    pub readable_width_min_columns: u16,
     /// Show agent labels in split pane borders when no manual pane label is set. Default: false.
     pub show_agent_labels_on_pane_borders: bool,
     /// Hide the tab row when the workspace has one tab. Default: false.
@@ -1253,6 +1257,7 @@ impl Default for UiConfig {
             readable_width_columns: 120,
             readable_width_agents: true,
             readable_width_max_percent: 100,
+            readable_width_min_columns: 80,
             show_agent_labels_on_pane_borders: false,
             hide_tab_bar_when_single_tab: false,
             tab_bar_position: TabBarPositionConfig::Top,
@@ -1572,6 +1577,7 @@ status_indicators = "symbols"
         assert_eq!(default_config.ui.readable_width_columns, 120);
         assert!(default_config.ui.readable_width_agents);
         assert_eq!(default_config.ui.readable_width_max_percent, 100);
+        assert_eq!(default_config.ui.readable_width_min_columns, 80);
         assert!(!default_config.ui.show_agent_labels_on_pane_borders);
         assert!(!default_config.ui.hide_tab_bar_when_single_tab);
         assert_eq!(
@@ -1591,6 +1597,7 @@ pane_gaps = true
 readable_width_columns = 104
 readable_width_agents = false
 readable_width_max_percent = 70
+readable_width_min_columns = 90
 show_agent_labels_on_pane_borders = true
 hide_tab_bar_when_single_tab = true
 tab_bar_position = "bottom"
@@ -1612,6 +1619,7 @@ tab_bar_right_separator = " · "
         assert_eq!(config.ui.readable_width_columns, 104);
         assert!(!config.ui.readable_width_agents);
         assert_eq!(config.ui.readable_width_max_percent, 70);
+        assert_eq!(config.ui.readable_width_min_columns, 90);
         assert!(config.ui.show_agent_labels_on_pane_borders);
         assert!(config.ui.hide_tab_bar_when_single_tab);
         assert_eq!(config.ui.tab_bar_position, TabBarPositionConfig::Bottom);

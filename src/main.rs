@@ -326,9 +326,14 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # readable_width_agents = true
 
 # Maximum readable-width pane width (including borders) as a percentage of the
-# terminal pane area width (10-100). The effective cap is the smaller of this
-# and readable_width_columns plus border/scrollbar overhead.
+# terminal pane area width (10-100). It only narrows wide areas: the cap never
+# goes below readable_width_min_columns, and readable_width_columns plus
+# border/scrollbar overhead still applies.
 # readable_width_max_percent = 100
+
+# Content columns the percentage cap never goes below (minimum 20). Areas at or
+# under this width get no side bars.
+# readable_width_min_columns = 80
 
 # Show detected/reported agent labels in split pane borders when no manual pane name is set.
 # show_agent_labels_on_pane_borders = false
