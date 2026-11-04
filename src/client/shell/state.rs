@@ -991,6 +991,8 @@ pub(super) struct WorkspaceEntry {
     pub(super) index: usize,
     pub(super) indented: bool,
     pub(super) last_child: bool,
+    /// A top-level row directly followed by its indented worktree rows.
+    pub(super) has_children: bool,
 }
 
 impl ClientShellState {

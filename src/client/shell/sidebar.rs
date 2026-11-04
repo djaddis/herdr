@@ -495,6 +495,7 @@ pub(crate) fn workspace_entries(
                 index,
                 indented: false,
                 last_child: false,
+                has_children: false,
             });
             continue;
         };
@@ -514,6 +515,7 @@ pub(crate) fn workspace_entries(
                 index: parent,
                 indented: false,
                 last_child: false,
+                has_children: false,
             });
         }
         if collapsed_groups.contains(&worktree.key) {
@@ -529,6 +531,7 @@ pub(crate) fn workspace_entries(
                     index: active,
                     indented: true,
                     last_child: true,
+                    has_children: false,
                 });
             }
             continue;
@@ -548,7 +551,13 @@ pub(crate) fn workspace_entries(
                 index: *child,
                 indented: true,
                 last_child: child_index + 1 == children.len(),
+                has_children: false,
             });
+        }
+    }
+    for index in 1..entries.len() {
+        if entries[index].indented && !entries[index - 1].indented {
+            entries[index - 1].has_children = true;
         }
     }
     entries
@@ -731,6 +740,15 @@ pub(in crate::client::shell) fn render_workspace_rows(
             );
         } else if row_index == 0 {
             x = x.saturating_add(1);
+        } else if entry.has_children {
+            x = put_segment(
+                buffer,
+                x,
+                y,
+                area.right(),
+                " │ ",
+                Style::default().fg(palette.overlay0),
+            );
         } else {
             x = x.saturating_add(3);
         }
